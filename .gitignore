@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+settings.json
+inquiries.json
+*.jpeg
+*.jpg
+*.png

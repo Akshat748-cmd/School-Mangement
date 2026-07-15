@@ -123,7 +123,10 @@ export default function App() {
     smtpPort: "465",
     smtpUser: "",
     smtpPass: "",
-    inquiryRecipient: "jainakshat6878@gmail.com"
+    inquiryRecipient: "jainakshat6878@gmail.com",
+    brevoApiKey: "",
+    brevoSenderEmail: "",
+    brevoSenderName: "AMPS Portal"
   });
   const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "settings">("inquiries");
   const [adminErrorMsg, setAdminErrorMsg] = useState("");
@@ -137,73 +140,23 @@ export default function App() {
     setInquiryError(null);
 
     try {
-      const recipientEmail = "jainakshat6878@gmail.com";
-      console.log(`[Inquiry Client] Sending inquiry for ${inquiryName}. Starting browser-direct dispatch to ${recipientEmail}...`);
+      console.log(`[Inquiry Client] Sending inquiry for ${inquiryName}...`);
 
-      let clientDispatched = false;
-      let clientStatus = "Pending";
-      let clientError = "";
-
-      // We attempt to dispatch from the browser (client-side) first.
-      // This is highly trusted because it runs from the user's home IP, bypassing any Cloud Run server blocks.
-      try {
-        const clientResponse = await fetch(`https://formsubmit.co/ajax/${recipientEmail}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify({
-            "Name / Parent": inquiryName,
-            "Phone / Mobile": inquiryPhone,
-            "Message / Inquiry": inquiryMessage || "Interested in school admission",
-            "_subject": `✨ Direct AMPS Admission Inquiry: ${inquiryName} (${inquiryPhone})`,
-            "_captcha": "false"
-          })
-        });
-
-        if (clientResponse.ok) {
-          const clientData = await clientResponse.json();
-          clientDispatched = true;
-          
-          if (clientData.success === "false" || (clientData.message && clientData.message.toLowerCase().includes("activate"))) {
-            clientStatus = "Needs Activation";
-            console.log("[Inquiry Client] Direct FormSubmit triggered successfully! Activation mail dispatched to:", recipientEmail);
-          } else {
-            clientStatus = "Delivered";
-            console.log("[Inquiry Client] Direct FormSubmit delivered successfully!");
-          }
-        } else {
-          console.warn("[Inquiry Client] Direct FormSubmit failed. Status:", clientResponse.status);
-          clientError = `HTTP error ${clientResponse.status}`;
-        }
-      } catch (clientErr: any) {
-        console.error("[Inquiry Client] Direct FormSubmit error:", clientErr);
-        clientError = clientErr.message || "Network error";
-      }
-
-      console.log(`[Inquiry Client] Logging inquiry inside local database...`);
-      // Notify the server about the inquiry.
-      // If clientDispatched is true, the server will skip sending emails (avoiding duplicates or server IP blocks)
-      // and directly log it as successful!
       const response = await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: inquiryName,
           phone: inquiryPhone,
-          message: inquiryMessage,
-          clientDispatched,
-          clientStatus,
-          clientError
+          message: inquiryMessage
         })
       });
 
       const data = await response.json();
       if (response.ok && data.success) {
         setInquirySubmitted(true);
-        setEmailSent(clientDispatched || data.emailSent);
-        setDispatchStatus(clientDispatched ? clientStatus : data.dispatchStatus);
+        setEmailSent(data.emailSent);
+        setDispatchStatus(data.dispatchStatus);
         setWhatsappUrl(data.whatsappRedirectUrl);
 
         // Clear input fields
@@ -211,7 +164,7 @@ export default function App() {
         setInquiryPhone("");
         setInquiryMessage("");
       } else {
-        throw new Error(data.message || "Failed to dispatch inquiry on server database.");
+        throw new Error(data.message || "Failed to dispatch inquiry on server.");
       }
     } catch (err: any) {
       console.error("[Inquiry Client] Error processing inquiry:", err);
@@ -2191,29 +2144,32 @@ export default function App() {
                               className="w-full border border-slate-300 p-2 rounded text-sm bg-white"
                             >
                               <option value="web3forms">Web3Forms Secure API (Recommended - 100% Inbox Delivery)</option>
+                              <option value="brevo">Brevo Transactional API (High Reliability)</option>
                               <option value="formsubmit">FormSubmit Tunnel</option>
                               <option value="smtp">Nodemailer SMTP Relay (Ports might be blocked)</option>
                             </select>
                             <p className="text-[10px] text-slate-400 mt-1 leading-normal">
-                              Web3Forms routes messages over HTTPS Web API, fully bypassing GCP Cloud Run port restrictions!
+                              Web3Forms & Brevo route messages over HTTPS Web APIs, fully bypassing GCP Cloud Run port restrictions!
                             </p>
                           </div>
 
-                          <div>
-                            <label className="block text-xs font-mono text-slate-600 uppercase tracking-wider mb-1">
-                              Web3Forms Access Key (Get Free Key)
-                            </label>
-                            <input 
-                              type="text" 
-                              placeholder="Paste Web3Forms Key here..."
-                              value={adminSettings.web3formsKey || ""}
-                              onChange={(e) => setAdminSettings({ ...adminSettings, web3formsKey: e.target.value })}
-                              className="w-full border border-slate-300 p-2 rounded text-sm font-mono"
-                            />
-                            <p className="text-[10px] text-slate-500 mt-1 leading-normal bg-amber-50 p-2 border border-amber-100 rounded">
-                              💡 <strong>How to get free key in 5 seconds:</strong> Visit <a href="https://web3forms.com/#start" target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-bold underline">web3forms.com</a>, enter your email <strong>{adminSettings.inquiryRecipient || "jainakshat6878@gmail.com"}</strong>, and they will email you an Access Key instantly. Paste that key above for 100% reliable inbox delivery!
-                            </p>
-                          </div>
+                          {adminSettings.emailProvider === "web3forms" && (
+                            <div>
+                              <label className="block text-xs font-mono text-slate-600 uppercase tracking-wider mb-1">
+                                Web3Forms Access Key (Get Free Key)
+                              </label>
+                              <input 
+                                type="text" 
+                                placeholder="Paste Web3Forms Key here..."
+                                value={adminSettings.web3formsKey || ""}
+                                onChange={(e) => setAdminSettings({ ...adminSettings, web3formsKey: e.target.value })}
+                                className="w-full border border-slate-300 p-2 rounded text-sm font-mono"
+                              />
+                              <p className="text-[10px] text-slate-500 mt-1 leading-normal bg-amber-50 p-2 border border-amber-100 rounded">
+                                💡 <strong>How to get free key in 5 seconds:</strong> Visit <a href="https://web3forms.com/#start" target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-bold underline">web3forms.com</a>, enter your email <strong>{adminSettings.inquiryRecipient || "jainakshat6878@gmail.com"}</strong>, and they will email you an Access Key instantly. Paste that key above for 100% reliable inbox delivery!
+                              </p>
+                            </div>
+                          )}
 
                           <div>
                             <label className="block text-xs font-mono text-slate-600 uppercase tracking-wider mb-1">
@@ -2257,6 +2213,48 @@ export default function App() {
                               className="w-full border border-slate-300 p-2 rounded text-sm font-mono"
                             />
                           </div>
+
+                          {adminSettings.emailProvider === "brevo" && (
+                            <div className="bg-slate-50 p-3 border border-slate-200 rounded-sm space-y-3">
+                              <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500 font-bold">Brevo API Configuration</p>
+                              <div>
+                                <label className="block text-[10px] font-mono text-slate-600 uppercase tracking-wider mb-1">
+                                  Brevo API Key (v3)
+                                </label>
+                                <input 
+                                  type="password" 
+                                  placeholder="xkeysib-..." 
+                                  value={adminSettings.brevoApiKey || ""} 
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, brevoApiKey: e.target.value })} 
+                                  className="w-full border border-slate-300 p-1.5 rounded text-xs font-mono" 
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-mono text-slate-600 uppercase tracking-wider mb-1">
+                                  Verified Sender Email
+                                </label>
+                                <input 
+                                  type="email" 
+                                  placeholder="sender@domain.com" 
+                                  value={adminSettings.brevoSenderEmail || ""} 
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, brevoSenderEmail: e.target.value })} 
+                                  className="w-full border border-slate-300 p-1.5 rounded text-xs font-mono" 
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-mono text-slate-600 uppercase tracking-wider mb-1">
+                                  Sender Name
+                                </label>
+                                <input 
+                                  type="text" 
+                                  placeholder="AMPS Portal" 
+                                  value={adminSettings.brevoSenderName || "AMPS Portal"} 
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, brevoSenderName: e.target.value })} 
+                                  className="w-full border border-slate-300 p-1.5 rounded text-xs font-mono" 
+                                />
+                              </div>
+                            </div>
+                          )}
 
                           {adminSettings.emailProvider === "smtp" && (
                             <div className="bg-slate-50 p-3 border border-slate-200 rounded-sm space-y-2">

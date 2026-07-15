@@ -22,7 +22,10 @@ const DEFAULT_SETTINGS = {
   smtpPort: "465",
   smtpUser: "",
   smtpPass: "",
-  inquiryRecipient: "jainakshat6878@gmail.com"
+  inquiryRecipient: "jainakshat6878@gmail.com",
+  brevoApiKey: "",              // Brevo API Key
+  brevoSenderEmail: "",         // Verified sender email in Brevo
+  brevoSenderName: "AMPS Portal" // Sender name
 };
 
 // Helper: Read Settings
@@ -184,7 +187,63 @@ async function startServer() {
 
     if (!clientDispatched) {
       try {
-        if (config.emailProvider === "web3forms" && config.web3formsKey) {
+        if (config.emailProvider === "brevo" && config.brevoApiKey) {
+          console.log(`[Dispatcher] Routing via Brevo API to recipient: ${recipient}`);
+          const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+              "api-key": config.brevoApiKey,
+              "Content-Type": "application/json",
+              "Accept": "application/json"
+            },
+            body: JSON.stringify({
+              sender: {
+                name: config.brevoSenderName || "AMPS Portal",
+                email: config.brevoSenderEmail || "no-reply@ampsschool.com"
+              },
+              to: [
+                {
+                  email: recipient,
+                  name: "School Admin"
+                }
+              ],
+              subject: `✨ New Admission Inquiry: ${name} (${phone})`,
+              htmlContent: `
+                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px; color: #333;">
+                  <h2 style="color: #14213d; margin-top: 0; border-bottom: 2px solid #C9A227; padding-bottom: 10px;">New Prospective Student Inquiry</h2>
+                  <p>A new admission inquiry has been submitted on the Ashish Memorial Public School Portal:</p>
+                  <table style="width: 100%; border-collapse: collapse; margin-top: 15px; text-align: left;">
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; width: 150px; background-color: #f9f9f9;">Name:</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f9f9f9;">${name}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Phone:</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee;"><a href="tel:${phone}" style="color: #14213d; text-decoration: none; font-weight: bold;">${phone}</a></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; background-color: #f9f9f9;">Message/Class:</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f9f9f9; white-space: pre-wrap;">${message || "Interested in school admission."}</td>
+                    </tr>
+                  </table>
+                  <div style="margin-top: 25px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
+                    Submitted on: ${new Date().toLocaleString("en-IN")}<br/>
+                    Sent via Brevo API Email Delivery
+                  </div>
+                </div>
+              `
+            })
+          });
+
+          if (response.ok) {
+            emailSent = true;
+            newInquiry.dispatchStatus = "Delivered";
+            console.log("[Dispatcher] Brevo API delivery successful!");
+          } else {
+            const data: any = await response.json();
+            throw new Error(data.message || JSON.stringify(data) || "Brevo API rejected the post.");
+          }
+        } else if (config.emailProvider === "web3forms" && config.web3formsKey) {
         // Option 1: Web3Forms (HTTP Client) - Most stable, bypasses all port blocks
         console.log(`[Dispatcher] Routing via Web3Forms API to recipient: ${recipient}`);
         const response = await fetch("https://api.web3forms.com/submit", {
