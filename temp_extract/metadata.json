@@ -1,0 +1,6 @@
+{
+  "name": "Ashish Memorial Public School",
+  "description": "Official marketing website for Ashish Memorial Public Sr. Sec. School (AMPS), Rajasthan. English & Hindi Medium, P.G. to XII, featuring IIT-JEE & NEET Foundation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

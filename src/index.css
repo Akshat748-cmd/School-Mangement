@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&family=Work+Sans:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink-navy: #0A1931;       /* Rich Deep Navy Blue */
+  --color-navy-light: #15305B;     /* Elegant Mid-Navy */
+  --color-brass-gold: #D4AF37;     /* High-quality Metallic Gold */
+  --color-maroon: #921A31;         /* Premium Crimson Red */
+  --color-ivory-paper: #FAFBFC;    /* Modern, crisp light background */
+  --color-muted-board: #F1F5F9;    /* Clean Slate 100 panel */
+  --color-border-custom: #E2E8F0;  /* Crisp Slate 200 borders */
+  
+  --color-body-text: #1E293B;      /* Highly readable Slate 800 */
+  --color-muted-text: #475569;     /* Slate 600 for secondary text */
+}
+
+/* Custom school styling and subtle adjustments */
+html, body {
+  background-color: var(--color-ivory-paper);
+  color: var(--color-body-text);
+  font-family: var(--font-sans);
+  scroll-behavior: smooth;
+}
+
+/* Custom style for dashed board border */
+.dashed-divider {
+  background-image: linear-gradient(to right, #D4AF37 50%, rgba(255, 255, 255, 0) 0%);
+  background-position: bottom;
+  background-size: 10px 1px;
+  background-repeat: repeat-x;
+}
+
