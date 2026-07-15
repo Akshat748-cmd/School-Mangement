@@ -176,30 +176,41 @@ async function startServer() {
     };
 
     const config = readSettings();
-    const recipient = config.inquiryRecipient || process.env.INQUIRY_RECIPIENT_EMAIL || "jainakshat6878@gmail.com";
+    
+    // Support Environment Variables as overrides for hosting environments like Render (which have ephemeral storage)
+    const emailProvider = process.env.EMAIL_PROVIDER || config.emailProvider;
+    const recipient = process.env.INQUIRY_RECIPIENT_EMAIL || config.inquiryRecipient || "jainakshat6878@gmail.com";
+    const brevoApiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
+    const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL || config.brevoSenderEmail;
+    const brevoSenderName = process.env.BREVO_SENDER_NAME || config.brevoSenderName;
+    const web3formsKey = process.env.WEB3FORMS_KEY || config.web3formsKey;
+    const smtpHost = process.env.SMTP_HOST || config.smtpHost;
+    const smtpPort = process.env.SMTP_PORT || config.smtpPort;
+    const smtpUser = process.env.SMTP_USER || config.smtpUser;
+    const smtpPass = process.env.SMTP_PASS || config.smtpPass;
 
     // B. Dispatch based on configured provider (only if client did not already dispatch from browser)
-    console.log(`[Dispatcher] New inquiry received from ${name}. Preferred provider: ${config.emailProvider}. Client Dispatched: ${clientDispatched}`);
+    console.log(`[Dispatcher] New inquiry received from ${name}. Preferred provider: ${emailProvider}. Client Dispatched: ${clientDispatched}`);
 
     let emailSent = clientDispatched ? true : false;
-    let providerUsed = clientDispatched ? "Browser AJAX (Direct)" : config.emailProvider;
+    let providerUsed = clientDispatched ? "Browser AJAX (Direct)" : emailProvider;
     let errorLog = clientDispatched ? (clientError || "") : "";
 
     if (!clientDispatched) {
       try {
-        if (config.emailProvider === "brevo" && config.brevoApiKey) {
+        if (emailProvider === "brevo" && brevoApiKey) {
           console.log(`[Dispatcher] Routing via Brevo API to recipient: ${recipient}`);
           const response = await fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: {
-              "api-key": config.brevoApiKey,
+              "api-key": brevoApiKey,
               "Content-Type": "application/json",
               "Accept": "application/json"
             },
             body: JSON.stringify({
               sender: {
-                name: config.brevoSenderName || "AMPS Portal",
-                email: config.brevoSenderEmail || "no-reply@ampsschool.com"
+                name: brevoSenderName || "AMPS Portal",
+                email: brevoSenderEmail || "no-reply@ampsschool.com"
               },
               to: [
                 {
@@ -243,7 +254,7 @@ async function startServer() {
             const data: any = await response.json();
             throw new Error(data.message || JSON.stringify(data) || "Brevo API rejected the post.");
           }
-        } else if (config.emailProvider === "web3forms" && config.web3formsKey) {
+        } else if (emailProvider === "web3forms" && web3formsKey) {
         // Option 1: Web3Forms (HTTP Client) - Most stable, bypasses all port blocks
         console.log(`[Dispatcher] Routing via Web3Forms API to recipient: ${recipient}`);
         const response = await fetch("https://api.web3forms.com/submit", {
@@ -253,7 +264,7 @@ async function startServer() {
             "Accept": "application/json"
           },
           body: JSON.stringify({
-            access_key: config.web3formsKey,
+            access_key: web3formsKey,
             name: `${name} (AMPS Inquiry)`,
             email: recipient,
             subject: `NEW ADMISSION INQUIRY: ${name} (${phone})`,
@@ -274,23 +285,23 @@ async function startServer() {
           throw new Error(data.message || "Web3Forms API rejected the post.");
         }
 
-      } else if (config.emailProvider === "smtp" && config.smtpHost && config.smtpUser && config.smtpPass) {
+      } else if (emailProvider === "smtp" && smtpHost && smtpUser && smtpPass) {
         // Option 2: Direct SMTP Connection (Note: Might time out on Cloud Run)
-        console.log(`[Dispatcher] Routing via SMTP relay through ${config.smtpHost}`);
+        console.log(`[Dispatcher] Routing via SMTP relay through ${smtpHost}`);
         const transporter = nodemailer.createTransport({
-          host: config.smtpHost,
-          port: parseInt(config.smtpPort) || 465,
-          secure: parseInt(config.smtpPort) === 465,
+          host: smtpHost,
+          port: parseInt(smtpPort) || 465,
+          secure: parseInt(smtpPort) === 465,
           auth: {
-            user: config.smtpUser,
-            pass: config.smtpPass
+            user: smtpUser,
+            pass: smtpPass
           },
           connectionTimeout: 8000,
           greetingTimeout: 5000
         });
 
         await transporter.sendMail({
-          from: `"AMPS School Portal" <${config.smtpUser}>`,
+          from: `"AMPS School Portal" <${smtpUser}>`,
           to: recipient,
           subject: `AMPS Portal Admission Inquiry: ${name}`,
           text: `Admission Inquiry Details:\n\nName: ${name}\nPhone: ${phone}\nMessage/Stream: ${message || "Not specified"}`
