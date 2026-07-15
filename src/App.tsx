@@ -99,6 +99,7 @@ export default function App() {
   // Custom interactive feature: Contact Inquiry State with Intelligent Server-Side Database & Fallbacks
   const [inquiryName, setInquiryName] = useState("");
   const [inquiryPhone, setInquiryPhone] = useState("");
+  const [inquiryEmail, setInquiryEmail] = useState("");
   const [inquiryMessage, setInquiryMessage] = useState("");
   const [inquirySubmitted, setInquirySubmitted] = useState(false);
   const [inquirySubmitting, setInquirySubmitting] = useState(false);
@@ -148,6 +149,7 @@ export default function App() {
         body: JSON.stringify({
           name: inquiryName,
           phone: inquiryPhone,
+          email: inquiryEmail,
           message: inquiryMessage
         })
       });
@@ -162,6 +164,7 @@ export default function App() {
         // Clear input fields
         setInquiryName("");
         setInquiryPhone("");
+        setInquiryEmail("");
         setInquiryMessage("");
       } else {
         throw new Error(data.message || "Failed to dispatch inquiry on server.");
@@ -1812,6 +1815,20 @@ export default function App() {
                   </div>
                   <div>
                     <label className="block text-xs font-mono text-muted-text uppercase tracking-wider mb-1">
+                      Email Address *
+                    </label>
+                    <input 
+                      type="email" 
+                      required
+                      disabled={inquirySubmitting}
+                      placeholder="e.g. parent@domain.com"
+                      value={inquiryEmail}
+                      onChange={(e) => setInquiryEmail(e.target.value)}
+                      className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text disabled:opacity-60 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono text-muted-text uppercase tracking-wider mb-1">
                       Message / Desired Stream or Class
                     </label>
                     <textarea 
@@ -2082,6 +2099,11 @@ export default function App() {
                                   <span className="font-mono text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 border border-indigo-100 rounded font-bold">
                                     📞 {inq.phone}
                                   </span>
+                                  {inq.email && (
+                                    <span className="font-mono text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 border border-blue-100 rounded font-bold">
+                                      ✉️ {inq.email}
+                                    </span>
+                                  )}
                                   <span className={`font-mono text-[9px] px-2 py-0.5 rounded border ${inq.dispatchStatus === "Delivered" ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}`}>
                                     📧 {inq.dispatchStatus}
                                   </span>
@@ -2102,6 +2124,14 @@ export default function App() {
                                 >
                                   Call
                                 </a>
+                                {inq.email && (
+                                  <a 
+                                    href={`mailto:${inq.email}`}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-sm cursor-pointer"
+                                  >
+                                    Mail
+                                  </a>
+                                )}
                                 <a 
                                   href={`https://api.whatsapp.com/send?phone=91${inq.phone.replace(/[^0-9]/g, "")}&text=` + encodeURIComponent(`Hello ${inq.name}, we received your admission inquiry for Al-Momin Public School...`)}
                                   target="_blank"

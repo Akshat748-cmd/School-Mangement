@@ -153,12 +153,12 @@ async function startServer() {
 
   // 6. API: Submit New Admission Inquiry
   app.post("/api/send-email", async (req, res) => {
-    const { name, phone, message, clientDispatched, clientStatus, clientError } = req.body;
+    const { name, phone, email, message, clientDispatched, clientStatus, clientError } = req.body;
 
-    if (!name || !phone) {
+    if (!name || !phone || !email) {
       return res.status(400).json({ 
         success: false, 
-        message: "Name and Phone number are required." 
+        message: "Name, Phone number, and Email address are required." 
       });
     }
 
@@ -168,6 +168,7 @@ async function startServer() {
       id: "inq_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
       name,
       phone,
+      email: email || "",
       message: message || "Interested in school admission.",
       timestamp: new Date().toISOString(),
       dispatchedVia: clientDispatched ? "Browser AJAX (Direct)" : "local_only",
@@ -209,7 +210,7 @@ async function startServer() {
             },
             body: JSON.stringify({
               sender: {
-                name: brevoSenderName || "AMPS Portal",
+                name: `${name} via AMPS Portal`,
                 email: brevoSenderEmail || "no-reply@ampsschool.com"
               },
               to: [
@@ -218,6 +219,7 @@ async function startServer() {
                   name: "School Admin"
                 }
               ],
+              replyTo: email ? { email, name } : undefined,
               subject: `✨ New Admission Inquiry: ${name} (${phone})`,
               htmlContent: `
                 <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px; color: #333;">
@@ -233,8 +235,12 @@ async function startServer() {
                       <td style="padding: 10px; border-bottom: 1px solid #eee;"><a href="tel:${phone}" style="color: #14213d; text-decoration: none; font-weight: bold;">${phone}</a></td>
                     </tr>
                     <tr>
-                      <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; background-color: #f9f9f9;">Message/Class:</td>
-                      <td style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f9f9f9; white-space: pre-wrap;">${message || "Interested in school admission."}</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; background-color: #f9f9f9;">Email:</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; background-color: #f9f9f9;">${email ? `<a href="mailto:${email}" style="color: #14213d; text-decoration: none;">${email}</a>` : "Not provided"}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Message/Class:</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #eee; white-space: pre-wrap;">${message || "Interested in school admission."}</td>
                     </tr>
                   </table>
                   <div style="margin-top: 25px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
@@ -267,10 +273,12 @@ async function startServer() {
             access_key: web3formsKey,
             name: `${name} (AMPS Inquiry)`,
             email: recipient,
+            replyto: email || undefined,
             subject: `NEW ADMISSION INQUIRY: ${name} (${phone})`,
             message: `You have received a new admission inquiry on the AMPS School Portal:\n\n` +
                      `• Student/Parent Name: ${name}\n` +
                      `• Contact Phone: ${phone}\n` +
+                     `• Email Address: ${email || "Not provided"}\n` +
                      `• Message/Desired Class: ${message || "Not specified"}\n\n` +
                      `--- Form submitted via AMPS Web Portal ---`
           })
@@ -303,8 +311,9 @@ async function startServer() {
         await transporter.sendMail({
           from: `"AMPS School Portal" <${smtpUser}>`,
           to: recipient,
+          replyTo: email || undefined,
           subject: `AMPS Portal Admission Inquiry: ${name}`,
-          text: `Admission Inquiry Details:\n\nName: ${name}\nPhone: ${phone}\nMessage/Stream: ${message || "Not specified"}`
+          text: `Admission Inquiry Details:\n\nName: ${name}\nPhone: ${phone}\nEmail: ${email || "Not provided"}\nMessage/Stream: ${message || "Not specified"}`
         });
 
         emailSent = true;
@@ -321,6 +330,10 @@ async function startServer() {
         const formParams = new URLSearchParams();
         formParams.append("Name", name);
         formParams.append("Phone / Mobile", phone);
+        formParams.append("Email Address", email || "Not provided");
+        if (email) {
+          formParams.append("_replyto", email);
+        }
         formParams.append("Message", message || "Interested in school admission");
         formParams.append("_subject", `New AMPS Admission Inquiry: ${name} (${phone})`);
         formParams.append("_captcha", "false");
