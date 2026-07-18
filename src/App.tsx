@@ -431,6 +431,156 @@ export default function App() {
       category: "science",
       localSrc: "/assets/science-fair-3.jpeg",
       fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    // --- Topper & Board Achievements (Milestones) ---
+    {
+      id: "top-1",
+      title: "Board Merit Position Topper",
+      subtitle: "Celebrating our outstanding student securing a top district rank in the Rajasthan Board senior secondary examinations.",
+      category: "milestones",
+      localSrc: "/assets/top-1.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "top-2",
+      title: "State Board Rank Achievers",
+      subtitle: "Honoring our high-scoring scholars who achieved remarkable percentages in the annual board examinations.",
+      category: "milestones",
+      localSrc: "/assets/top-2.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "top-3",
+      title: "NEET 2025 Exam Achievers",
+      subtitle: "Proudly celebrating our future medical professionals who qualified the NEET 2025 exam with exceptional marks and top All India Ranks (AIR).",
+      category: "milestones",
+      localSrc: "/assets/top-3.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "top-4",
+      title: "JEE Advanced 2025 Toppers",
+      subtitle: "Celebrating the outstanding success of our engineering aspirants qualifying the prestigious JEE Advanced 2025 exam with top national ranks.",
+      category: "milestones",
+      localSrc: "/assets/top-4.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    // --- Cultural Events ---
+    {
+      id: "cultural-6",
+      title: "Fancy Dress Competition",
+      subtitle: "Our kindergarten and primary block students showcasing creative costumes representing national leaders, professionals, and social themes.",
+      category: "cultural",
+      localSrc: "/assets/cultural-6.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "cultural-7",
+      title: "Independence Day Festivities",
+      subtitle: "Patriotic programs, group choir songs, and flag hoisting celebrations led by school students and faculty.",
+      category: "cultural",
+      localSrc: "/assets/cultural-7.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "cultural-8",
+      title: "Annual Drama and Stage Play",
+      subtitle: "Our talented students enacting a meaningful theatrical play on social values during the school's annual day.",
+      category: "cultural",
+      localSrc: "/assets/cultural-8.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "cultural-9",
+      title: "Guru Vandan Chhatra Abhinandan",
+      subtitle: "A prestigious felicitation program organized by Bharat Vikas Parishad to honor our dedicated educators and student achievers.",
+      category: "cultural",
+      localSrc: "/assets/cultural-9.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    // --- News & Media Prints ---
+    {
+      id: "news-4",
+      title: "Rajasthan Patrika Merit Feature",
+      subtitle: "Press clipping from Rajasthan Patrika celebrating AMPS students who secured outstanding positions in state board examinations.",
+      category: "news",
+      localSrc: "/assets/news-4.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "news-5",
+      title: "Academic Milestone Announcement",
+      subtitle: "Local Hindi media covering the exceptional success rate and toppers list of AMPS, establishing school leadership.",
+      category: "news",
+      localSrc: "/assets/news-5.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "news-6",
+      title: "District Science Fair Victory Feature",
+      subtitle: "Press clipping celebrating the triumph of our 6 students in the district-level science fair, including projects on Waste Management (Ayush Jain, Class 9), Models for Disabled Children (Gagan Gupta), and Mathematical Models (Poorvi Jindal).",
+      category: "news",
+      localSrc: "/assets/news-6.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    // --- Second Batch: Topper & Board Achievements (Milestones) ---
+    {
+      id: "top-5",
+      title: "Board Merit Distinction Ranker",
+      subtitle: "Celebrating our top achiever who scored high honors and distinctions in the board examinations.",
+      category: "milestones",
+      localSrc: "/assets/top-5.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "neet-achiever",
+      title: "NEET Exam Success Achievers",
+      subtitle: "Honoring our stellar students who successfully qualified for medical college admissions through NEET preparation.",
+      category: "milestones",
+      localSrc: "/assets/neet.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+
+    // --- Second Batch: Science & Exhibition (Corrected Descriptions) ---
+    {
+      id: "science-4",
+      title: "Innovative Science Exhibition Stalls",
+      subtitle: "Students displaying custom built physics and mechanical projects at their exhibition booths.",
+      category: "science",
+      localSrc: "/assets/science-fair-4.jpg.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "science-5",
+      title: "Electronics & Robotics Demonstrations",
+      subtitle: "A group of students showcasing smart sensor projects and circuit board integrations.",
+      category: "science",
+      localSrc: "/assets/science-fair-5.jpg.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "science-6",
+      title: "Interactive Working Science Models",
+      subtitle: "Exhibitors explaining the mechanical workings and scientific concepts behind their projects to visitors.",
+      category: "science",
+      localSrc: "/assets/science-fair-6.jpg.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "science-7",
+      title: "Science Exhibition Welcome & Presentation",
+      subtitle: "Our students welcoming guests at the front welcome counter with experimental modules ready for evaluation.",
+      category: "science",
+      localSrc: "/assets/science-fair-7.jpg.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&q=80&w=800&h=600"
+    },
+    {
+      id: "science-8",
+      title: "Smart City & Infrastructure Working Model",
+      subtitle: "A team of students presenting their green city model featuring smart road grids, solar arrays, and sustainable urban infrastructure.",
+      category: "science",
+      localSrc: "/assets/science-fair-8.jpg.jpeg",
+      fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
     }
   ];
 
@@ -685,6 +835,91 @@ export default function App() {
             </div>
 
           </div>
+        </div>
+      </section>
+
+      {/* 2.5. NEET 2026 RESULT SPECIAL HIGHLIGHT */}
+      <section className="bg-ivory-paper py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+        <div className="bg-gradient-to-br from-ink-navy via-[#1b2b4d] to-navy-light border-2 border-brass-gold/60 rounded-md p-6 sm:p-8 shadow-xl flex flex-col lg:flex-row gap-8 items-center relative overflow-hidden group">
+          
+          {/* Subtle gold ribbon in the corner */}
+          <div className="absolute top-0 right-0 bg-brass-gold text-ink-navy font-mono text-[9px] font-bold tracking-widest uppercase py-1.5 px-10 rotate-45 translate-x-8 translate-y-3 shadow-sm select-none">
+            New Result
+          </div>
+          
+          {/* Left Text Block */}
+          <div className="flex-1 space-y-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="font-mono text-[9px] md:text-xs tracking-wider text-white bg-maroon px-3 py-1 rounded-full uppercase font-bold animate-pulse">
+                🔴 Live Announcement
+              </span>
+              <span className="font-mono text-[9px] md:text-xs tracking-wider text-brass-gold bg-brass-gold/10 px-3 py-1 rounded-full border border-brass-gold/30 uppercase font-semibold">
+                NEET 2026 Results
+              </span>
+            </div>
+            
+            <h2 className="font-serif text-2xl sm:text-3xl text-white font-bold leading-tight tracking-tight">
+              Spectacular Success in <span className="text-brass-gold">NEET 2026 Medical Exam</span>!
+            </h2>
+            
+            <p className="text-gray-300 text-sm leading-relaxed font-sans max-w-2xl">
+              Ashish Memorial Public School celebrates the outstanding results of our students in the National Eligibility cum Entrance Test (NEET) 2026. Through our dedicated foundation curriculum and expert in-house faculty, our students have qualified with exceptional scores, securing pathways to premier medical colleges.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4 max-w-sm pt-2">
+              <div className="border-l-2 border-brass-gold pl-3">
+                <p className="text-white text-lg font-bold">In-House Prep</p>
+                <p className="text-gray-400 text-xs">No separate coaching needed</p>
+              </div>
+              <div className="border-l-2 border-brass-gold pl-3">
+                <p className="text-white text-lg font-bold">100% Support</p>
+                <p className="text-gray-400 text-xs">Custom study modules & test series</p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button 
+                onClick={() => setSelectedGalleryImg({
+                  id: "neet-achiever",
+                  title: "NEET Exam Success Achievers",
+                  subtitle: "Honoring our stellar students who successfully qualified for medical college admissions through NEET preparation.",
+                  category: "milestones",
+                  localSrc: "/assets/neet.jpeg",
+                  fallbackSrc: "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&q=80&w=800&h=600"
+                })}
+                className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 transition-all font-mono font-bold text-xs tracking-wider uppercase px-5 py-3 rounded-sm border border-brass-gold shadow-md hover:translate-y-[-1px] active:translate-y-0 cursor-pointer inline-flex items-center gap-2"
+              >
+                View Full Result Banner <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Right Image Block */}
+          <div className="w-full lg:w-[380px] shrink-0">
+            <div 
+              onClick={() => setSelectedGalleryImg({
+                id: "neet-achiever",
+                title: "NEET Exam Success Achievers",
+                subtitle: "Honoring our stellar students who successfully qualified for medical college admissions through NEET preparation.",
+                category: "milestones",
+                localSrc: "/assets/neet.jpeg",
+                fallbackSrc: "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&q=80&w=800&h=600"
+              })}
+              className="relative overflow-hidden rounded-sm border border-white/10 shadow-lg group-hover:border-brass-gold/40 transition-colors cursor-pointer"
+            >
+              <img 
+                src="/assets/neet.jpeg" 
+                alt="AMPS NEET 2026 Success Banner" 
+                className="w-full h-auto transition-transform duration-500 group-hover:scale-102"
+              />
+              <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors duration-300 flex items-center justify-center">
+                <span className="bg-white/95 text-ink-navy font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-sm shadow-md flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <ZoomIn className="w-3.5 h-3.5" /> Click to Expand
+                </span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -1165,7 +1400,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 md:p-8"
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 md:p-8"
           >
             {/* Click outside to close */}
             <div 
@@ -1216,6 +1451,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
                   {[
                     { id: "all", label: "All Photos" },
+                    { id: "milestones", label: "Toppers & Milestones" },
                     { id: "awards", label: "Award Ceremonies" },
                     { id: "sports", label: "Sports & Fitness" },
                     { id: "cultural", label: "Cultural Events" },
@@ -1236,8 +1472,8 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* Gallery Photo Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Gallery Photo Grid (Masonry Layout to fit various aspect ratios without empty gaps) */}
+                <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-0">
                   <AnimatePresence mode="popLayout">
                     {displayedGalleryItems.map((item) => (
                       <motion.div
@@ -1247,15 +1483,15 @@ export default function App() {
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.2 }}
                         key={item.id}
-                        className="group bg-white rounded-sm border border-border-custom overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+                        className="break-inside-avoid mb-6 group bg-white rounded-sm border border-border-custom overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col"
                         onClick={() => setSelectedGalleryImg(item)}
                       >
                         {/* Photo Container */}
-                        <div className="relative overflow-hidden aspect-[4/3] bg-muted-board">
+                        <div className="relative overflow-hidden bg-white">
                           <img
                             src={item.localSrc}
                             alt={item.title}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="w-full h-auto transition-transform duration-500 group-hover:scale-102"
                           />
                           
                           {/* Hover Overlay Icon */}
@@ -1270,7 +1506,8 @@ export default function App() {
                             {item.category === "awards" ? "Award Meet" : 
                              item.category === "sports" ? "Athletics" : 
                              item.category === "cultural" ? "Cultural" : 
-                             item.category === "science" ? "Science" : "News Coverage"}
+                             item.category === "science" ? "Science" : 
+                             item.category === "milestones" ? "Milestone" : "News Coverage"}
                           </div>
                         </div>
 
@@ -1319,7 +1556,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => setSelectedGalleryImg(null)}
           >
             <button
@@ -1371,7 +1608,8 @@ export default function App() {
                     {selectedGalleryImg.category === "awards" ? "Award Meet" : 
                      selectedGalleryImg.category === "sports" ? "Athletics" : 
                      selectedGalleryImg.category === "cultural" ? "Cultural Event" : 
-                     selectedGalleryImg.category === "science" ? "Science & Lab" : "News Coverage"}
+                     selectedGalleryImg.category === "science" ? "Science & Lab" : 
+                     selectedGalleryImg.category === "milestones" ? "Academic Milestone" : "News Coverage"}
                   </span>
                   <h3 className="font-serif text-xl font-bold leading-tight tracking-tight text-white mb-3">
                     {selectedGalleryImg.title}
@@ -1402,11 +1640,11 @@ export default function App() {
               <div className="relative bg-white p-4 border border-border-custom rounded-sm shadow-md">
                 {/* Secondary frame accent */}
                 <div className="absolute inset-2 border border-border-custom pointer-events-none"></div>
-                <div className="aspect-[4/3] w-full bg-muted-board rounded-sm overflow-hidden relative">
+                <div className="w-full bg-white rounded-sm overflow-hidden relative">
                   <img 
                     src="/assets/school-building-1.jpeg?v=2"
                     alt="Ashish Memorial School Campus & Activities" 
-                    className="w-full h-full object-cover"
+                    className="w-full h-auto"
                   />
                   <div className="absolute bottom-3 right-3 bg-white/95 px-3 py-1 text-[10px] font-mono uppercase tracking-widest font-semibold border border-border-custom text-ink-navy">
                     Established 2005
@@ -1497,11 +1735,11 @@ export default function App() {
               <div className="relative bg-white p-4 border border-border-custom rounded-sm shadow-md w-full max-w-md">
                 {/* Secondary frame accent */}
                 <div className="absolute inset-2 border border-border-custom pointer-events-none"></div>
-                <div className="aspect-[4/5] w-full bg-muted-board rounded-sm overflow-hidden relative">
+                <div className="w-full bg-white rounded-sm overflow-hidden relative">
                   <img 
                     src="/assets/principal.jpeg?v=2" 
                     alt="Ashish Memorial Public School Inspirational Leadership" 
-                    className="w-full h-full object-cover"
+                    className="w-full h-auto"
                   />
                   <div className="absolute bottom-3 left-3 bg-ink-navy/90 text-white border border-brass-gold/40 px-3 py-1 text-[10px] font-mono uppercase tracking-widest font-semibold">
                     Inspiring Minds

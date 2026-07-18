@@ -11,3 +11,10 @@ inquiries.json
 *.jpeg
 *.jpg
 *.png
+*.jfif
+
+# Allow images in public/assets/
+!public/assets/*.jpeg
+!public/assets/*.jpg
+!public/assets/*.png
+!public/assets/*.jfif
