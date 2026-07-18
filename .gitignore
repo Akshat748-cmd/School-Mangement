@@ -12,6 +12,9 @@ inquiries.json
 *.jpg
 *.png
 *.jfif
+school.db
+*.db
+*.bak
 
 # Allow images in public/assets/
 !public/assets/*.jpeg

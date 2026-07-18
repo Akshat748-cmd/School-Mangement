@@ -4,39 +4,109 @@ import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import Database from "better-sqlite3";
 
 // Load environment variables
 dotenv.config();
 
-// File paths for local persistence
-const INQUIRIES_FILE = path.join(process.cwd(), "inquiries.json");
-const SETTINGS_FILE = path.join(process.cwd(), "settings.json");
+// Initialize SQLite database
+const db = new Database(path.join(process.cwd(), "school.db"));
+
+// Create tables if they don't exist
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    settings_json TEXT NOT NULL
+  );
+  
+  CREATE TABLE IF NOT EXISTS inquiries (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    email TEXT,
+    message TEXT,
+    timestamp TEXT NOT NULL,
+    dispatchedVia TEXT,
+    dispatchStatus TEXT,
+    dispatchError TEXT
+  );
+`);
 
 // Default Configuration Settings
 const DEFAULT_SETTINGS = {
   adminPassword: "ampsadmin",
-  whatsappPhone: "919829012345", // Default WhatsApp phone number for school redirects
+  whatsappPhone: "919999999999", // Default WhatsApp phone number placeholder
   emailProvider: "formsubmit",   // Default to formsubmit for zero-config out of the box activation
   web3formsKey: "",             // Web3Forms free Access Key
   smtpHost: "",
   smtpPort: "465",
   smtpUser: "",
   smtpPass: "",
-  inquiryRecipient: "jainakshat6878@gmail.com",
+  inquiryRecipient: "admin@example.com",
   brevoApiKey: "",              // Brevo API Key
   brevoSenderEmail: "",         // Verified sender email in Brevo
   brevoSenderName: "AMPS Portal" // Sender name
 };
 
+// Migration from flat JSON files to SQLite
+try {
+  const SETTINGS_JSON_PATH = path.join(process.cwd(), "settings.json");
+  const INQUIRIES_JSON_PATH = path.join(process.cwd(), "inquiries.json");
+
+  // Migrate Settings
+  const settingsCount = db.prepare("SELECT COUNT(*) as count FROM settings").get() as { count: number };
+  if (settingsCount.count === 0 && fs.existsSync(SETTINGS_JSON_PATH)) {
+    console.log("[Migration] Migrating settings.json to SQLite database...");
+    const rawData = fs.readFileSync(SETTINGS_JSON_PATH, "utf-8");
+    db.prepare("INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)").run(rawData);
+    fs.renameSync(SETTINGS_JSON_PATH, SETTINGS_JSON_PATH + ".bak");
+    console.log("[Migration] settings.json migrated and backed up.");
+  }
+
+  // Migrate Inquiries
+  const inquiriesCount = db.prepare("SELECT COUNT(*) as count FROM inquiries").get() as { count: number };
+  if (inquiriesCount.count === 0 && fs.existsSync(INQUIRIES_JSON_PATH)) {
+    console.log("[Migration] Migrating inquiries.json to SQLite database...");
+    const rawData = fs.readFileSync(INQUIRIES_JSON_PATH, "utf-8");
+    const list = JSON.parse(rawData);
+    if (Array.isArray(list)) {
+      const insertStmt = db.prepare(`
+        INSERT OR REPLACE INTO inquiries (
+          id, name, phone, email, message, timestamp, dispatchedVia, dispatchStatus, dispatchError
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      db.transaction(() => {
+        for (const inq of list) {
+          insertStmt.run(
+            inq.id,
+            inq.name,
+            inq.phone,
+            inq.email || "",
+            inq.message || "",
+            inq.timestamp,
+            inq.dispatchedVia || "",
+            inq.dispatchStatus || "",
+            inq.dispatchError || ""
+          );
+        }
+      })();
+      fs.renameSync(INQUIRIES_JSON_PATH, INQUIRIES_JSON_PATH + ".bak");
+      console.log(`[Migration] ${list.length} inquiries migrated and inquiries.json backed up.`);
+    }
+  }
+} catch (err) {
+  console.error("[Migration] Error migrating JSON to SQLite:", err);
+}
+
 // Helper: Read Settings
 function readSettings() {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+    const row = db.prepare("SELECT settings_json FROM settings WHERE id = 1").get() as { settings_json: string } | undefined;
+    if (row && row.settings_json) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(row.settings_json) };
     }
   } catch (err) {
-    console.error("[DB] Error reading settings file, using defaults:", err);
+    console.error("[DB] Error reading settings from SQLite, using defaults:", err);
   }
   return { ...DEFAULT_SETTINGS };
 }
@@ -44,10 +114,11 @@ function readSettings() {
 // Helper: Save Settings
 function saveSettings(settings: any) {
   try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
+    const jsonStr = JSON.stringify(settings);
+    db.prepare("INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)").run(jsonStr);
     return true;
   } catch (err) {
-    console.error("[DB] Error writing settings file:", err);
+    console.error("[DB] Error writing settings to SQLite:", err);
     return false;
   }
 }
@@ -55,12 +126,10 @@ function saveSettings(settings: any) {
 // Helper: Read Inquiries
 function readInquiries() {
   try {
-    if (fs.existsSync(INQUIRIES_FILE)) {
-      const data = fs.readFileSync(INQUIRIES_FILE, "utf-8");
-      return JSON.parse(data);
-    }
+    const rows = db.prepare("SELECT * FROM inquiries ORDER BY timestamp ASC").all();
+    return rows;
   } catch (err) {
-    console.error("[DB] Error reading inquiries file, returning empty list:", err);
+    console.error("[DB] Error reading inquiries from SQLite, returning empty list:", err);
   }
   return [];
 }
@@ -68,17 +137,40 @@ function readInquiries() {
 // Helper: Save Inquiries
 function saveInquiries(inquiries: any[]) {
   try {
-    fs.writeFileSync(INQUIRIES_FILE, JSON.stringify(inquiries, null, 2), "utf-8");
+    const deleteStmt = db.prepare("DELETE FROM inquiries");
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO inquiries (
+        id, name, phone, email, message, timestamp, dispatchedVia, dispatchStatus, dispatchError
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    db.transaction((list: any[]) => {
+      deleteStmt.run();
+      for (const inq of list) {
+        insertStmt.run(
+          inq.id,
+          inq.name,
+          inq.phone,
+          inq.email || "",
+          inq.message || "",
+          inq.timestamp,
+          inq.dispatchedVia || "",
+          inq.dispatchStatus || "",
+          inq.dispatchError || ""
+        );
+      }
+    })(inquiries);
+
     return true;
   } catch (err) {
-    console.error("[DB] Error writing inquiries file:", err);
+    console.error("[DB] Error saving inquiries to SQLite:", err);
     return false;
   }
 }
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Middleware to parse JSON
   app.use(express.json());
@@ -180,7 +272,7 @@ async function startServer() {
     
     // Support Environment Variables as overrides for hosting environments like Render (which have ephemeral storage)
     const emailProvider = process.env.EMAIL_PROVIDER || config.emailProvider;
-    const recipient = process.env.INQUIRY_RECIPIENT_EMAIL || config.inquiryRecipient || "jainakshat6878@gmail.com";
+    const recipient = process.env.INQUIRY_RECIPIENT_EMAIL || config.inquiryRecipient || "admin@example.com";
     const brevoApiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
     const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL || config.brevoSenderEmail;
     const brevoSenderName = process.env.BREVO_SENDER_NAME || config.brevoSenderName;
