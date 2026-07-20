@@ -84,7 +84,7 @@ export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: Hero
             </motion.div>
 
             <motion.div variants={itemVariants} className="space-y-2 sm:space-y-3">
-              <h1 className="font-serif text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-white font-bold leading-tight tracking-tight drop-shadow-sm">
+              <h1 className="font-serif text-3xl sm:text-3xl md:text-4xl lg:text-5xl text-white font-bold leading-tight tracking-tight drop-shadow-sm">
                 For a better tomorrow, <br className="hidden sm:inline" />
                 <span className="italic text-brass-gold font-semibold block mt-1 drop-shadow-sm">
                   outshining every year.

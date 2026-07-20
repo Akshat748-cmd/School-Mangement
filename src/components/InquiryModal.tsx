@@ -353,7 +353,7 @@ export default function InquiryModal({
                       Failed to Send Inquiry
                     </h4>
                     <p className="text-xs text-slate-600 mb-4 leading-relaxed font-sans">
-                      We were unable to deliver your email inquiry right now. Please try calling us directly at <a href="tel:07469234006" className="font-bold text-ink-navy underline">07469 234006</a> or connect via WhatsApp below.
+                      We were unable to deliver your email inquiry right now. Please try calling us directly at <a href="tel:9116304006" className="font-bold text-ink-navy underline">91163 04006</a> or connect via WhatsApp below.
                     </p>
                     {whatsappUrl && (
                       <a 
@@ -421,7 +421,7 @@ export default function InquiryModal({
                       type="text" 
                       required
                       disabled={inquirySubmitting}
-                      placeholder="e.g. Ramesh Kumar"
+                      placeholder="Parent or Student Name"
                       value={inquiryName}
                       onChange={(e) => setInquiryName(e.target.value)}
                       className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text disabled:opacity-60 text-sm"
@@ -436,7 +436,7 @@ export default function InquiryModal({
                       type="tel" 
                       required
                       disabled={inquirySubmitting}
-                      placeholder="e.g. 98290XXXXX (your WhatsApp number)"
+                      placeholder="10-digit WhatsApp number"
                       value={inquiryPhone}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -474,7 +474,7 @@ export default function InquiryModal({
                         type="email" 
                         required
                         disabled={inquirySubmitting || otpVerified}
-                        placeholder="e.g. parent@domain.com"
+                        placeholder="Email Address"
                         value={inquiryEmail}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -588,7 +588,7 @@ export default function InquiryModal({
                     <textarea 
                       rows={3}
                       disabled={inquirySubmitting}
-                      placeholder="e.g. Looking for Class XI Science stream admission."
+                      placeholder="Desired class, stream, or any specific query"
                       value={inquiryMessage}
                       onChange={(e) => setInquiryMessage(e.target.value)}
                       className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text resize-none disabled:opacity-60 text-sm"
@@ -628,7 +628,7 @@ export default function InquiryModal({
 
             {/* Modal Footer */}
             <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-500 font-mono shrink-0">
-              <span>School Office: 07469 234006</span>
+              <span>School Office: 91163 04006</span>
               <button
                 onClick={onClose}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1 rounded font-bold uppercase tracking-wider transition-colors cursor-pointer"

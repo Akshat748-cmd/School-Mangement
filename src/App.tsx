@@ -17,6 +17,7 @@ import Header from "./components/Header";
 import Hero from "./components/Hero";
 import Gallery from "./components/Gallery";
 import LeadershipSection from "./components/LeadershipSection";
+import FaqModal from "./components/FaqModal";
 import AdmissionInquiryForm from "./components/AdmissionInquiryForm";
 import Footer from "./components/Footer";
 import CurriculumModal from "./components/CurriculumModal";
@@ -87,6 +88,7 @@ export default function App() {
   const [isSafetyModalOpen, setIsSafetyModalOpen] = useState(false);
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
   const [inquiryPresetMessage, setInquiryPresetMessage] = useState("");
   const [inquiryFormContext, setInquiryFormContext] = useState<"admission" | "counselling">("admission");
 
@@ -124,6 +126,7 @@ export default function App() {
         logoError={logoError}
         setLogoError={setLogoError}
         setIsMediaModalOpen={setIsMediaModalOpen}
+        setIsFaqModalOpen={setIsFaqModalOpen}
       />
 
       {/* 2. HERO SECTION (including NEET Special Highlight) */}
@@ -450,7 +453,7 @@ export default function App() {
 
             {/* Stat 1 */}
             <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
-              <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
+              <span className="font-serif text-3xl sm:text-4xl md:text-5xl text-maroon font-bold mb-2">
                 <Counter value={21} suffix="+" />
               </span>
               <span className="font-mono text-[10px] tracking-widest text-muted-text uppercase text-center max-w-[160px]">
@@ -460,7 +463,7 @@ export default function App() {
 
             {/* Stat 2 */}
             <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
-              <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
+              <span className="font-serif text-3xl sm:text-4xl md:text-5xl text-maroon font-bold mb-2">
                 <Counter value={3} />
               </span>
               <span className="font-mono text-[10px] tracking-widest text-muted-text uppercase text-center max-w-[160px]">
@@ -470,7 +473,7 @@ export default function App() {
 
             {/* Stat 3 */}
             <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
-              <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
+              <span className="font-serif text-3xl sm:text-4xl md:text-5xl text-maroon font-bold mb-2">
                 <Counter value={2} />
               </span>
               <span className="font-mono text-[10px] tracking-widest text-muted-text uppercase text-center max-w-[160px]">
@@ -480,7 +483,7 @@ export default function App() {
 
             {/* Stat 4 */}
             <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
-              <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
+              <span className="font-serif text-3xl sm:text-4xl md:text-5xl text-maroon font-bold mb-2">
                 P.G–XII
               </span>
               <span className="font-mono text-[10px] tracking-widest text-muted-text uppercase text-center max-w-[160px]">
@@ -729,6 +732,7 @@ export default function App() {
         logoError={logoError}
         setLogoError={setLogoError}
         setIsMediaModalOpen={setIsMediaModalOpen}
+        setIsFaqModalOpen={setIsFaqModalOpen}
       />
 
       {/* 11. CURRICULUM DETAIL MODAL */}
@@ -768,6 +772,13 @@ export default function App() {
           <AdminPanel onClose={handleCloseAdminPanel} />
         </React.Suspense>
       )}
+
+      {/* 15. FAQ DETAIL MODAL */}
+      <FaqModal
+        isOpen={isFaqModalOpen}
+        onClose={() => setIsFaqModalOpen(false)}
+        onOpenInquiryModal={handleOpenAdmissionInquiry}
+      />
 
     </div>
   );

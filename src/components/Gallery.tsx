@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ZoomIn, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 
 export const galleryItems = [
   {
@@ -467,25 +467,6 @@ export default function Gallery({
                     ))}
                   </AnimatePresence>
                 </div>
-
-                {/* Empty State */}
-                {displayedGalleryItems.length === 0 && (
-                  <div className="text-center py-16 bg-white border border-border-custom rounded-sm">
-                    <span className="font-serif text-muted-text italic text-base">No photos found in this category yet.</span>
-                  </div>
-                )}
-
-                {/* Hint instruction block for user */}
-                <div className="mt-12 bg-white/80 border border-border-custom p-5 rounded-sm max-w-2xl mx-auto flex items-start gap-4 shadow-sm">
-                  <Sparkles className="w-5 h-5 text-brass-gold shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-serif text-sm font-bold text-ink-navy">Add Your Own Photos Easily</h4>
-                    <p className="text-muted-text text-[11px] mt-1 leading-relaxed font-sans">
-                      You can personalize this gallery by uploading your own images into the explorer! Name them <code className="font-mono font-bold text-maroon bg-muted-board px-1 rounded">award-1.jpg</code>, <code className="font-mono font-bold text-maroon bg-muted-board px-1 rounded">sports-1.jpg</code>, <code className="font-mono font-bold text-maroon bg-muted-board px-1 rounded">cultural-1.jpg</code>, or <code className="font-mono font-bold text-maroon bg-muted-board px-1 rounded">science-1.jpg</code>, and they will automatically display here in full high-resolution!
-                    </p>
-                  </div>
-                </div>
-
               </div>
             </motion.div>
           </motion.div>

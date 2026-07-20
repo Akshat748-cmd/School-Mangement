@@ -913,7 +913,7 @@ async function startServer() {
             Ashish Memorial Public Senior Secondary School
           </div>
           <div>
-            Hindaun City (Karauli), Rajasthan · Phone: 07469 234006 / 94144 00824 · Email: ampspankaj@gmail.com
+            Hindaun City (Karauli), Rajasthan · Phone: 91163 04006 / 94131 82619 · Email: ampspankaj@gmail.com
           </div>
           <div style="margin-top: 8px; color: #94a3b8; font-size: 10px;">
             Submitted on: ${formattedDate} IST

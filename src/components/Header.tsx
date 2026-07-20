@@ -62,12 +62,14 @@ interface HeaderProps {
   logoError: boolean;
   setLogoError: React.Dispatch<React.SetStateAction<boolean>>;
   setIsMediaModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsFaqModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export default function Header({
   logoError,
   setLogoError,
-  setIsMediaModalOpen
+  setIsMediaModalOpen,
+  setIsFaqModalOpen
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -91,8 +93,8 @@ export default function Header({
         }`}>
           
           {/* Left: Brand / Logo */}
-          <a href="#hero" className="flex items-center gap-3 md:gap-4 group">
-            <div className="w-11 h-11 md:w-13 md:h-13 rounded-full border-2 border-brass-gold overflow-hidden bg-white flex items-center justify-center shrink-0 shadow-inner">
+          <a href="#hero" className="flex items-center gap-2.5 sm:gap-3 md:gap-4 group">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 md:w-13 md:h-13 rounded-full border-2 border-brass-gold overflow-hidden bg-white flex items-center justify-center shrink-0 shadow-inner">
               {logoError ? (
                 <SchoolLogo className="w-full h-full" />
               ) : (
@@ -145,6 +147,13 @@ export default function Header({
             >
               Media
             </motion.button>
+            <motion.button 
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsFaqModalOpen(true)} 
+              className="text-white/85 hover:text-brass-gold transition-colors uppercase cursor-pointer bg-transparent border-none p-0 outline-none font-mono text-sm tracking-wide"
+            >
+              FAQ
+            </motion.button>
             <motion.a 
               whileTap={{ scale: 0.95 }}
               href="#contact" 
@@ -153,22 +162,6 @@ export default function Header({
               Contact
             </motion.a>
           </nav>
-
-          {/* Far Right: Login Button */}
-          <div className="hidden md:flex items-center">
-            <motion.a 
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.02 }}
-              href="#login-placeholder" 
-              onClick={(e) => {
-                e.preventDefault();
-                alert("Student/Teacher Portal login interface is currently a placeholder for integration with future modules.");
-              }}
-              className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 transition-all font-mono font-bold text-xs tracking-wider uppercase px-4 py-2 rounded-sm border border-brass-gold shadow-sm"
-            >
-              Login
-            </motion.a>
-          </div>
 
           {/* Mobile Menu Toggle Button */}
           <div className="flex md:hidden">
@@ -226,23 +219,21 @@ export default function Header({
               >
                 Media
               </button>
+              <button 
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setIsFaqModalOpen(true);
+                }}
+                className="text-white/90 hover:text-brass-gold py-2 text-left transition-colors border-b border-white/5 uppercase font-mono text-sm tracking-wider bg-transparent border-none p-0 outline-none cursor-pointer"
+              >
+                FAQ
+              </button>
               <a 
                 href="#contact" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-white/90 hover:text-brass-gold py-2 transition-colors border-b border-white/5"
+                className="text-white/90 hover:text-brass-gold py-2 transition-colors"
               >
                 Contact
-              </a>
-              <a 
-                href="#login-placeholder"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMobileMenuOpen(false);
-                  alert("Portal login interface is a placeholder for future integration.");
-                }}
-                className="bg-brass-gold text-ink-navy text-center font-bold py-2.5 rounded-sm shadow-sm mt-3"
-              >
-                Login
               </a>
             </div>
           </motion.div>

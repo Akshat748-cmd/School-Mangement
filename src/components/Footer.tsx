@@ -5,12 +5,14 @@ interface FooterProps {
   logoError: boolean;
   setLogoError: React.Dispatch<React.SetStateAction<boolean>>;
   setIsMediaModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsFaqModalOpen?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export default function Footer({
   logoError,
   setLogoError,
-  setIsMediaModalOpen
+  setIsMediaModalOpen,
+  setIsFaqModalOpen
 }: FooterProps) {
   return (
     <footer className="bg-ink-navy border-t border-brass-gold/25 py-6 sm:py-12 px-4 sm:px-6 lg:px-8 w-full mt-auto text-white">
@@ -43,7 +45,7 @@ export default function Footer({
         </div>
 
         {/* Quick links to sections */}
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono text-white/70 justify-center">
+        <div className="hidden sm:flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono text-white/70 justify-center">
           <a href="#navbar" className="hover:text-brass-gold transition-colors">TOP</a>
           <span>·</span>
           <a href="#notices" className="hover:text-brass-gold transition-colors">NOTICES</a>
@@ -59,6 +61,17 @@ export default function Footer({
             MEDIA
           </button>
           <span>·</span>
+          {setIsFaqModalOpen && (
+            <>
+              <button 
+                onClick={() => setIsFaqModalOpen(true)}
+                className="hover:text-brass-gold transition-colors cursor-pointer text-xs font-mono text-white/70 bg-transparent border-none p-0 outline-none uppercase font-mono"
+              >
+                FAQ
+              </button>
+              <span>·</span>
+            </>
+          )}
           <a href="#contact" className="hover:text-brass-gold transition-colors">CONTACT</a>
         </div>
 

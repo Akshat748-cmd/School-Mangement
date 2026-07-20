@@ -313,7 +313,7 @@ export default function SafetyMandateModal({ isOpen, onClose, onOpenInquiryModal
                       Dedicated Safety Helpline & Email
                     </h5>
                     <p className="text-slate-600 leading-relaxed">
-                      Direct access to the school principal and safety desk at <a href="tel:07469234006" className="font-bold text-ink-navy underline">07469 234006</a> or via email at <a href="mailto:ampspankaj@gmail.com" className="font-bold text-maroon underline">ampspankaj@gmail.com</a>.
+                      Direct access to the school principal and safety desk at <a href="tel:9116304006" className="font-bold text-ink-navy underline">91163 04006</a> or via email at <a href="mailto:ampspankaj@gmail.com" className="font-bold text-maroon underline">ampspankaj@gmail.com</a>.
                     </p>
                   </div>
 
@@ -334,7 +334,7 @@ export default function SafetyMandateModal({ isOpen, onClose, onOpenInquiryModal
             {/* Modal Action Footer */}
             <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
               <p className="text-[11px] text-slate-500 font-mono text-center sm:text-left">
-                Safety Emergency & Helpline: 07469 234006 | 94144 00824
+                Safety Emergency & Helpline: 91163 04006 | 94144 00824
               </p>
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button

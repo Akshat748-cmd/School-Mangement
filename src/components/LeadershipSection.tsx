@@ -53,7 +53,7 @@ export default function LeadershipSection() {
           whileHover={{ y: -6, scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
           whileTap={{ scale: 0.98 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="bg-white p-5 sm:p-8 border border-border-custom rounded-sm text-center shadow-sm flex flex-col justify-between relative group text-slate-800"
+          className="bg-white p-4 sm:p-8 border border-border-custom rounded-sm text-center shadow-sm flex flex-col justify-between relative group text-slate-800"
         >
           <div className="absolute top-0 inset-x-0 h-1.5 bg-brass-gold"></div>
           <div>
@@ -62,7 +62,7 @@ export default function LeadershipSection() {
             </span>
             
             {/* Circular portrait */}
-            <div className="w-24 h-24 mx-auto mb-5 rounded-full border-2 border-brass-gold overflow-hidden bg-ink-navy flex items-center justify-center shadow-md relative group-hover:scale-105 transition-transform duration-300">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 sm:mb-5 rounded-full border-2 border-brass-gold overflow-hidden bg-ink-navy flex items-center justify-center shadow-md relative group-hover:scale-105 transition-transform duration-300">
               <img 
                 src="/assets/chairman.jpeg?v=2" 
                 alt="Chairman Riddhi Chand Jain" 
@@ -74,10 +74,10 @@ export default function LeadershipSection() {
             <h3 className="font-serif text-xl sm:text-2xl text-ink-navy font-bold mb-1">
               Riddhi Chand Jain
             </h3>
-            <p className="font-serif text-sm text-muted-text italic mb-4">
+            <p className="font-serif text-sm text-muted-text italic mb-3 sm:mb-4">
               (Advocate)
             </p>
-            <p className="text-muted-text text-sm leading-relaxed mb-6 font-sans">
+            <p className="text-muted-text text-sm leading-relaxed mb-5 sm:mb-6 font-sans">
               An esteemed advocate providing strategic oversight and steering the school’s core vision toward robust community integration.
             </p>
           </div>
@@ -96,7 +96,7 @@ export default function LeadershipSection() {
           whileHover={{ y: -6, scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
           whileTap={{ scale: 0.98 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="bg-white p-5 sm:p-8 border border-border-custom rounded-sm text-center shadow-sm flex flex-col justify-between relative group text-slate-800"
+          className="bg-white p-4 sm:p-8 border border-border-custom rounded-sm text-center shadow-sm flex flex-col justify-between relative group text-slate-800"
         >
           <div className="absolute top-0 inset-x-0 h-1.5 bg-maroon"></div>
           <div>
@@ -105,7 +105,7 @@ export default function LeadershipSection() {
             </span>
             
             {/* Circular portrait */}
-            <div className="w-24 h-24 mx-auto mb-5 rounded-full border-2 border-maroon overflow-hidden bg-ink-navy flex items-center justify-center shadow-md relative group-hover:scale-105 transition-transform duration-300">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 sm:mb-5 rounded-full border-2 border-maroon overflow-hidden bg-ink-navy flex items-center justify-center shadow-md relative group-hover:scale-105 transition-transform duration-300">
               <img 
                 src="/assets/administrator.jpeg" 
                 alt="Administrator Ashok Sharma" 
@@ -117,10 +117,10 @@ export default function LeadershipSection() {
             <h3 className="font-serif text-xl sm:text-2xl text-ink-navy font-bold mb-1">
               Ashok Sharma
             </h3>
-            <p className="font-serif text-sm text-muted-text italic mb-4">
+            <p className="font-serif text-sm text-muted-text italic mb-3 sm:mb-4">
               Management Oversight
             </p>
-            <p className="text-muted-text text-sm leading-relaxed mb-6 font-sans">
+            <p className="text-muted-text text-sm leading-relaxed mb-5 sm:mb-6 font-sans">
               Leading the active operational strategy, campus resources, and safety standard protocols for student well-being.
             </p>
           </div>
@@ -139,7 +139,7 @@ export default function LeadershipSection() {
           whileHover={{ y: -6, scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
           whileTap={{ scale: 0.98 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="bg-white p-5 sm:p-8 border border-border-custom rounded-sm text-center shadow-sm flex flex-col justify-between relative group text-slate-800"
+          className="bg-white p-4 sm:p-8 border border-border-custom rounded-sm text-center shadow-sm flex flex-col justify-between relative group text-slate-800"
         >
           <div className="absolute top-0 inset-x-0 h-1.5 bg-navy-light"></div>
           <div>
@@ -148,7 +148,7 @@ export default function LeadershipSection() {
             </span>
             
             {/* Circular portrait */}
-            <div className="w-24 h-24 mx-auto mb-5 rounded-full border-2 border-navy-light overflow-hidden bg-ink-navy flex items-center justify-center shadow-md relative group-hover:scale-105 transition-transform duration-300">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 sm:mb-5 rounded-full border-2 border-navy-light overflow-hidden bg-ink-navy flex items-center justify-center shadow-md relative group-hover:scale-105 transition-transform duration-300">
               <img 
                 src="/assets/principal-1.jpeg?v=2" 
                 alt="Principal Vardhman Jain" 
@@ -160,10 +160,10 @@ export default function LeadershipSection() {
             <h3 className="font-serif text-xl sm:text-2xl text-ink-navy font-bold mb-1">
               Vardhman Jain
             </h3>
-            <p className="font-serif text-sm text-muted-text italic mb-4">
+            <p className="font-serif text-sm text-muted-text italic mb-3 sm:mb-4">
               Academic Head
             </p>
-            <p className="text-muted-text text-sm leading-relaxed mb-6 font-sans">
+            <p className="text-muted-text text-sm leading-relaxed mb-5 sm:mb-6 font-sans">
               Supervising rigorous classroom schedules, bilingual curriculum design, and specialized JEE-NEET coaching integration.
             </p>
           </div>

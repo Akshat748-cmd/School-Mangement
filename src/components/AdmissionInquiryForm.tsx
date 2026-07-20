@@ -30,7 +30,7 @@ interface AdmissionInquiryFormProps {
   formContext?: "admission" | "counselling";
 }
 
-export default function AdmissionInquiryForm({ 
+export default function AdmissionInquiryForm({
   presetMessage,
   prefillMessage,
   formContext = "admission"
@@ -351,8 +351,8 @@ export default function AdmissionInquiryForm({
                   Phone Numbers
                 </h3>
                 <div className="space-y-1 font-mono text-sm">
-                  <a href="tel:07469234006" className="block text-muted-text hover:text-maroon transition-colors">
-                    07469 234006
+                  <a href="tel:9116304006" className="block text-muted-text hover:text-maroon transition-colors">
+                    91163 04006
                   </a>
                   <a href="tel:9414400824" className="block text-muted-text hover:text-maroon transition-colors">
                     94144 00824
@@ -364,7 +364,7 @@ export default function AdmissionInquiryForm({
               </div>
               <div className="pt-2">
                 <span className="font-mono text-[10px] text-brass-gold font-bold tracking-widest uppercase">
-                  Office Hours: 8AM-2PM
+                  Office Hours: 8 AM-3 PM
                 </span>
               </div>
             </div>
@@ -413,7 +413,7 @@ export default function AdmissionInquiryForm({
                     Failed to Send Inquiry
                   </h4>
                   <p className="text-xs text-slate-600 mb-4 leading-relaxed font-sans">
-                    We were unable to deliver your email inquiry right now. Please try calling us directly at <a href="tel:07469234006" className="font-bold text-ink-navy underline">07469 234006</a> or connect via WhatsApp below.
+                    We were unable to deliver your email inquiry right now. Please try calling us directly at <a href="tel:9116304006" className="font-bold text-ink-navy underline">91163 04006</a> or connect via WhatsApp below.
                   </p>
                   {whatsappUrl && (
                     <a
@@ -484,7 +484,7 @@ export default function AdmissionInquiryForm({
                     type="text"
                     required
                     disabled={inquirySubmitting}
-                    placeholder="e.g. Ramesh Kumar"
+                    placeholder="Parent or Student Name"
                     value={inquiryName}
                     onChange={(e) => setInquiryName(e.target.value)}
                     className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text disabled:opacity-60 text-sm"
@@ -498,7 +498,7 @@ export default function AdmissionInquiryForm({
                     type="tel"
                     required
                     disabled={inquirySubmitting}
-                    placeholder="e.g. 98290XXXXX (your WhatsApp number)"
+                    placeholder="10-digit WhatsApp number"
                     value={inquiryPhone}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -509,9 +509,8 @@ export default function AdmissionInquiryForm({
                       setPhoneTouched(true);
                       setPhoneError(validatePhone(inquiryPhone));
                     }}
-                    className={`w-full bg-ivory-paper border p-2.5 rounded-sm focus:outline-none text-body-text disabled:opacity-60 text-sm ${
-                      phoneTouched && phoneError ? "border-rose-500 focus:border-rose-500 bg-rose-50/20" : "border-border-custom focus:border-brass-gold"
-                    }`}
+                    className={`w-full bg-ivory-paper border p-2.5 rounded-sm focus:outline-none text-body-text disabled:opacity-60 text-sm ${phoneTouched && phoneError ? "border-rose-500 focus:border-rose-500 bg-rose-50/20" : "border-border-custom focus:border-brass-gold"
+                      }`}
                   />
                   {phoneTouched && phoneError && (
                     <p className="text-xs text-rose-600 font-sans mt-1">
@@ -535,7 +534,7 @@ export default function AdmissionInquiryForm({
                       type="email"
                       required
                       disabled={inquirySubmitting || otpVerified}
-                      placeholder="e.g. parent@domain.com"
+                      placeholder="Email Address"
                       value={inquiryEmail}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -552,13 +551,12 @@ export default function AdmissionInquiryForm({
                         setEmailTouched(true);
                         setEmailError(validateEmail(inquiryEmail));
                       }}
-                      className={`w-full bg-ivory-paper border p-2.5 rounded-sm focus:outline-none text-body-text disabled:opacity-80 text-sm ${
-                        emailTouched && emailError
-                          ? "border-rose-500 focus:border-rose-500 bg-rose-50/20"
-                          : otpVerified
+                      className={`w-full bg-ivory-paper border p-2.5 rounded-sm focus:outline-none text-body-text disabled:opacity-80 text-sm ${emailTouched && emailError
+                        ? "border-rose-500 focus:border-rose-500 bg-rose-50/20"
+                        : otpVerified
                           ? "border-emerald-500 bg-emerald-50/20"
                           : "border-border-custom focus:border-brass-gold"
-                      }`}
+                        }`}
                     />
                     {!otpVerified && (
                       <button
@@ -648,7 +646,7 @@ export default function AdmissionInquiryForm({
                   <textarea
                     rows={3}
                     disabled={inquirySubmitting}
-                    placeholder="e.g. Looking for Class XI Commerce admission with English medium."
+                    placeholder="Desired class, stream, or any specific query"
                     value={inquiryMessage}
                     onChange={(e) => setInquiryMessage(e.target.value)}
                     className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text resize-none disabled:opacity-60 text-sm"
