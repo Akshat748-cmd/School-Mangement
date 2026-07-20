@@ -5,9 +5,9 @@
 
 import React, { useState } from "react";
 import { motion, useInView } from "motion/react";
-import { 
-  ShieldCheck, 
-  GraduationCap, 
+import {
+  ShieldCheck,
+  GraduationCap,
   ArrowRight,
   MapPin
 } from "lucide-react";
@@ -19,6 +19,10 @@ import Gallery from "./components/Gallery";
 import LeadershipSection from "./components/LeadershipSection";
 import AdmissionInquiryForm from "./components/AdmissionInquiryForm";
 import Footer from "./components/Footer";
+import CurriculumModal from "./components/CurriculumModal";
+import SafetyMandateModal from "./components/SafetyMandateModal";
+import InquiryModal from "./components/InquiryModal";
+import StreamAdvisoryModal from "./components/StreamAdvisoryModal";
 
 // Reusable Count-Up Counter Component
 function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
@@ -79,6 +83,25 @@ export default function App() {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [selectedGalleryImg, setSelectedGalleryImg] = useState<any>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isCurriculumModalOpen, setIsCurriculumModalOpen] = useState(false);
+  const [isSafetyModalOpen, setIsSafetyModalOpen] = useState(false);
+  const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
+  const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
+  const [inquiryPresetMessage, setInquiryPresetMessage] = useState("");
+  const [inquiryFormContext, setInquiryFormContext] = useState<"admission" | "counselling">("admission");
+
+  const handleOpenAdmissionInquiry = () => {
+    setInquiryFormContext("admission");
+    setInquiryPresetMessage("");
+    setIsInquiryModalOpen(true);
+  };
+
+  const handleRequestCounsellingSession = () => {
+    setInquiryFormContext("counselling");
+    setInquiryPresetMessage("Requesting a stream selection counselling session (Science/Commerce/Arts).");
+    setIsStreamModalOpen(false);
+    setIsInquiryModalOpen(true);
+  };
 
   React.useEffect(() => {
     if (window.location.pathname === "/admin" || window.location.pathname === "/admin/") {
@@ -95,16 +118,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-brass-gold selection:text-ink-navy bg-ivory-paper">
-      
+
       {/* 1. STICKY NAVBAR */}
-      <Header 
-        logoError={logoError} 
-        setLogoError={setLogoError} 
-        setIsMediaModalOpen={setIsMediaModalOpen} 
+      <Header
+        logoError={logoError}
+        setLogoError={setLogoError}
+        setIsMediaModalOpen={setIsMediaModalOpen}
       />
 
       {/* 2. HERO SECTION (including NEET Special Highlight) */}
-      <Hero setSelectedGalleryImg={setSelectedGalleryImg} />
+      <Hero setSelectedGalleryImg={setSelectedGalleryImg} onOpenInquiryModal={handleOpenAdmissionInquiry} />
 
       {/* 3. THIN DASHED GOLD DIVIDER LINE */}
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -112,8 +135,8 @@ export default function App() {
       </div>
 
       {/* 4. NOTICE BOARD SECTION */}
-      <motion.section 
-        id="notices" 
+      <motion.section
+        id="notices"
         variants={sectionVariants}
         initial="hidden"
         whileInView="visible"
@@ -133,19 +156,19 @@ export default function App() {
         </motion.div>
 
         {/* Tan/cork-colored board container */}
-        <motion.div 
+        <motion.div
           variants={childVariants}
           className="bg-muted-board rounded-sm p-4 sm:p-8 lg:p-12 border border-border-custom shadow-inner relative overflow-hidden"
         >
           {/* Subtle wooden texture styling background elements */}
           <div className="absolute inset-0 bg-opacity-5 pointer-events-none bg-[radial-gradient(#C9A227_1px,transparent_1px)] [background-size:16px_16px] opacity-10"></div>
-          
+
           <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 lg:gap-10">
-            
-            {/* CARD 1: Admission Open */}
-            <motion.div 
+
+            {/* CARD 1: Admission Open 2026–27 */}
+            <motion.div
               whileHover={{ rotate: 0, y: -8, scale: 1.01 }}
-              initial={{ rotate: 1 }}
+              initial={{ rotate: -1 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
               className="bg-white p-4 pt-6 pb-5 sm:p-6 sm:pt-10 sm:pb-8 rounded-sm shadow-md border border-border-custom relative transition-shadow hover:shadow-xl flex flex-col justify-between text-slate-800"
             >
@@ -161,11 +184,11 @@ export default function App() {
                   </span>
                   <span className="font-mono text-[9px] text-muted-text">2026–27</span>
                 </div>
-                
+
                 <h3 className="font-serif text-xl text-ink-navy font-bold mb-3 text-left">
                   Admission Open 2026–27
                 </h3>
-                
+
                 <ul className="text-muted-text text-sm space-y-2 mb-4 leading-relaxed font-sans text-left">
                   <li className="flex items-start gap-2">
                     <span className="text-brass-gold mt-1 font-bold">·</span>
@@ -183,17 +206,17 @@ export default function App() {
               </div>
 
               <div className="pt-4 border-t border-dashed border-border-custom">
-                <a 
-                  href="#contact" 
-                  className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+                <button
+                  onClick={handleOpenAdmissionInquiry}
+                  className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer text-left"
                 >
                   Apply / Inquire Now <ArrowRight className="w-3.5 h-3.5" />
-                </a>
+                </button>
               </div>
             </motion.div>
 
             {/* CARD 2: IIT-JEE & NEET */}
-            <motion.div 
+            <motion.div
               whileHover={{ rotate: 0, y: -8, scale: 1.01 }}
               initial={{ rotate: -1 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -226,17 +249,17 @@ export default function App() {
               </div>
 
               <div className="pt-4 mt-4 border-t border-dashed border-border-custom">
-                <a 
-                  href="#why-amps" 
-                  className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+                <button
+                  onClick={() => setIsCurriculumModalOpen(true)}
+                  className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   Explore Curriculum <ArrowRight className="w-3.5 h-3.5" />
-                </a>
+                </button>
               </div>
             </motion.div>
 
             {/* CARD 3: Safe System for Girls */}
-            <motion.div 
+            <motion.div
               whileHover={{ rotate: 0, y: -8, scale: 1.01 }}
               initial={{ rotate: 1 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -270,12 +293,12 @@ export default function App() {
               </div>
 
               <div className="pt-4 mt-4 border-t border-dashed border-border-custom">
-                <a 
-                  href="#about" 
-                  className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+                <button
+                  onClick={() => setIsSafetyModalOpen(true)}
+                  className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   Our Safety Mandate <ArrowRight className="w-3.5 h-3.5" />
-                </a>
+                </button>
               </div>
             </motion.div>
 
@@ -291,8 +314,8 @@ export default function App() {
       </motion.section>
 
       {/* 5. FEATURES SECTION ("Why AMPS") */}
-      <motion.section 
-        id="why-amps" 
+      <motion.section
+        id="why-amps"
         variants={sectionVariants}
         initial="hidden"
         whileInView="visible"
@@ -300,7 +323,7 @@ export default function App() {
         className="bg-ink-navy text-white py-10 sm:py-16 px-4 sm:px-6 lg:px-8 w-full"
       >
         <div className="max-w-7xl mx-auto">
-          
+
           <motion.div variants={childVariants} className="mb-8 sm:mb-16 border-b border-brass-gold/20 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="text-left">
               <span className="font-mono text-xs tracking-widest text-brass-gold uppercase block mb-2">
@@ -317,7 +340,7 @@ export default function App() {
 
           {/* Timetable Period Grid */}
           <motion.div variants={childVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            
+
             {/* Period 01 */}
             <div className="border-l-2 border-brass-gold pl-6 py-2 flex flex-col justify-between text-left">
               <div>
@@ -401,21 +424,21 @@ export default function App() {
                 <p className="text-gray-300 text-xs sm:text-sm mt-1 font-sans">Our administrative block holds individual counselling sessions for stream matching (Science, Commerce, Arts) for high school board options.</p>
               </div>
             </div>
-            <motion.a 
+            <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              href="#contact" 
-              className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 px-5 py-2.5 rounded-sm font-mono text-xs font-bold uppercase tracking-wider text-center shrink-0"
+              onClick={() => setIsStreamModalOpen(true)}
+              className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 px-5 py-2.5 rounded-sm font-mono text-xs font-bold uppercase tracking-wider text-center shrink-0 cursor-pointer"
             >
               Contact Advisory
-            </motion.a>
+            </motion.button>
           </motion.div>
 
         </div>
       </motion.section>
 
       {/* 6. STATS STRIP */}
-      <motion.section 
+      <motion.section
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
@@ -424,7 +447,7 @@ export default function App() {
       >
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4 divide-y md:divide-y-0 md:divide-x divide-border-custom/80">
-            
+
             {/* Stat 1 */}
             <div className="text-center px-4 flex flex-col items-center justify-center pt-6 md:pt-0">
               <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
@@ -473,7 +496,7 @@ export default function App() {
       <LeadershipSection />
 
       {/* 8. PHOTO & EVENTS GALLERY SECTION */}
-      <Gallery 
+      <Gallery
         isMediaModalOpen={isMediaModalOpen}
         setIsMediaModalOpen={setIsMediaModalOpen}
         selectedGalleryImg={selectedGalleryImg}
@@ -481,8 +504,8 @@ export default function App() {
       />
 
       {/* 9. ABOUT SECTION */}
-      <motion.section 
-        id="about" 
+      <motion.section
+        id="about"
         variants={sectionVariants}
         initial="hidden"
         whileInView="visible"
@@ -491,16 +514,16 @@ export default function App() {
       >
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-12 lg:gap-16 items-center">
-            
+
             {/* Left Column (Academic Group Photo/Image) */}
             <motion.div variants={childVariants} className="lg:col-span-5 order-last lg:order-first">
               <div className="relative bg-white p-2 sm:p-4 border border-border-custom rounded-sm shadow-md">
                 {/* Secondary frame accent */}
                 <div className="absolute inset-1 sm:inset-2 border border-border-custom pointer-events-none"></div>
                 <div className="w-full bg-white rounded-sm overflow-hidden relative">
-                  <img 
+                  <img
                     src="/assets/school-building-1.jpeg?v=2"
-                    alt="Ashish Memorial School Campus & Activities" 
+                    alt="Ashish Memorial School Campus & Activities"
                     loading="lazy"
                     className="w-full h-auto"
                   />
@@ -516,7 +539,7 @@ export default function App() {
 
             {/* Right Column (Text details) */}
             <motion.div variants={childVariants} className="lg:col-span-7 flex flex-col space-y-6 text-left">
-              
+
               <div>
                 <span className="font-mono text-xs tracking-widest text-brass-gold uppercase block mb-2 font-semibold">
                   About Our Institution
@@ -570,8 +593,8 @@ export default function App() {
       </motion.section>
 
       {/* 9.5. VISION & MISSION SECTION */}
-      <motion.section 
-        id="vision-mission" 
+      <motion.section
+        id="vision-mission"
         variants={sectionVariants}
         initial="hidden"
         whileInView="visible"
@@ -579,7 +602,7 @@ export default function App() {
         className="py-10 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-border-custom bg-ivory-paper w-full"
       >
         <div className="max-w-7xl mx-auto">
-          
+
           <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-8 sm:mb-16">
             <span className="font-mono text-xs tracking-widest text-brass-gold font-semibold uppercase block mb-2">
               Our Foundations
@@ -594,24 +617,24 @@ export default function App() {
           </motion.div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-12 lg:gap-16 items-center">
-            
+
             {/* Left Column (Original Principal Image & Inspirational Quote) */}
             <motion.div variants={childVariants} className="lg:col-span-5 flex flex-col items-center">
               <div className="relative bg-white p-2 sm:p-4 border border-border-custom rounded-sm shadow-md w-full max-w-md">
                 {/* Secondary frame accent */}
                 <div className="absolute inset-1 sm:inset-2 border border-border-custom pointer-events-none"></div>
                 <div className="w-full bg-white rounded-sm overflow-hidden relative">
-                  <img 
-                    src="/assets/principal.jpeg?v=2" 
-                    alt="Ashish Memorial Public School Inspirational Leadership" 
+                  <img
+                    src="/assets/principal.jpeg?v=2"
+                    alt="Ashish Memorial Public School Inspirational Leadership"
                     loading="lazy"
                     className="w-full h-auto"
                   />
                   <div className="absolute bottom-3 left-3 bg-ink-navy/90 text-white border border-brass-gold/40 px-3 py-1 text-[10px] font-mono uppercase tracking-widest font-semibold">
-                    Inspiring Minds
+                    From the Principal
                   </div>
                 </div>
-                
+
                 {/* Overlay Quote */}
                 <div className="mt-5 text-center relative px-2 text-slate-800">
                   <span className="absolute -top-3 left-0 text-4xl font-serif text-brass-gold/20 leading-none">“</span>
@@ -629,7 +652,7 @@ export default function App() {
 
             {/* Right Column (Vision, Mission & Core Pillars Cards) */}
             <motion.div variants={childVariants} className="lg:col-span-7 flex flex-col space-y-6 sm:space-y-8 text-left">
-              
+
               {/* Vision Card */}
               <div className="bg-white p-4 sm:p-8 border border-border-custom rounded-sm shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group text-slate-800">
                 <div className="absolute top-0 left-0 h-full w-1.5 bg-brass-gold"></div>
@@ -639,7 +662,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-serif text-lg sm:text-xl font-bold text-ink-navy mb-2 flex items-center gap-2">
-                      Our Vision 
+                      Our Vision
                       <span className="text-xs font-mono font-normal text-muted-text italic">(हमारा दृष्टिकोण)</span>
                     </h3>
                     <p className="text-muted-text text-sm sm:text-base leading-relaxed">
@@ -699,16 +722,47 @@ export default function App() {
       </motion.section>
 
       {/* 10. CONTACT SECTION & INQUIRY FORM */}
-      <AdmissionInquiryForm />
+      <AdmissionInquiryForm formContext="admission" />
 
       {/* 10. FOOTER SECTION */}
-      <Footer 
-        logoError={logoError} 
-        setLogoError={setLogoError} 
-        setIsMediaModalOpen={setIsMediaModalOpen} 
+      <Footer
+        logoError={logoError}
+        setLogoError={setLogoError}
+        setIsMediaModalOpen={setIsMediaModalOpen}
       />
 
-      {/* 11. ADMIN DASHBOARD MODAL */}
+      {/* 11. CURRICULUM DETAIL MODAL */}
+      <CurriculumModal
+        isOpen={isCurriculumModalOpen}
+        onClose={() => setIsCurriculumModalOpen(false)}
+        onOpenInquiryModal={handleOpenAdmissionInquiry}
+      />
+
+      {/* 12. SAFETY MANDATE DETAIL MODAL */}
+      <SafetyMandateModal
+        isOpen={isSafetyModalOpen}
+        onClose={() => setIsSafetyModalOpen(false)}
+        onOpenInquiryModal={handleOpenAdmissionInquiry}
+      />
+
+      {/* 13. ADMISSION INQUIRY POPUP MODAL */}
+      <InquiryModal
+        key={inquiryFormContext}
+        isOpen={isInquiryModalOpen}
+        onClose={() => setIsInquiryModalOpen(false)}
+        presetMessage={inquiryPresetMessage}
+        prefillMessage={inquiryPresetMessage}
+        formContext={inquiryFormContext}
+      />
+
+      {/* 14. STREAM SELECTION ADVISORY MODAL */}
+      <StreamAdvisoryModal
+        isOpen={isStreamModalOpen}
+        onClose={() => setIsStreamModalOpen(false)}
+        onRequestSession={handleRequestCounsellingSession}
+      />
+
+      {/* 14. ADMIN DASHBOARD MODAL */}
       {showAdminPanel && (
         <React.Suspense fallback={null}>
           <AdminPanel onClose={handleCloseAdminPanel} />

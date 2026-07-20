@@ -4,9 +4,10 @@ import { motion } from "motion/react";
 
 interface HeroProps {
   setSelectedGalleryImg: (img: any) => void;
+  onOpenInquiryModal?: () => void;
 }
 
-export default function Hero({ setSelectedGalleryImg }: HeroProps) {
+export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: HeroProps) {
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -108,13 +109,18 @@ export default function Hero({ setSelectedGalleryImg }: HeroProps) {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 href="#contact"
-                className="border-2 border-white text-white hover:bg-white hover:text-ink-navy px-5 py-2 rounded-sm font-sans font-medium text-xs md:text-sm tracking-wide transition-all duration-200"
+                onClick={(e) => {
+                  if (onOpenInquiryModal) {
+                    e.preventDefault();
+                    onOpenInquiryModal();
+                  }
+                }}
+                className="border-2 border-white text-white hover:bg-white hover:text-ink-navy px-5 py-2 rounded-sm font-sans font-medium text-xs md:text-sm tracking-wide transition-all duration-200 cursor-pointer"
               >
                 Admission 2026–27
               </motion.a>
             </motion.div>
 
-            {/* Quick trust metrics badge */}
             <motion.div variants={itemVariants} className="grid grid-cols-3 gap-4 pt-5 border-t border-white/15 max-w-md">
               <div>
                 <p className="font-serif text-xl font-bold text-white">100%</p>

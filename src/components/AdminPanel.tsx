@@ -79,6 +79,23 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
+  const handleTestEmail = async () => {
+    setAdminErrorMsg("");
+    setAdminSuccessMsg("Testing email delivery via diagnostic endpoint...");
+    try {
+      const response = await fetch("/api/admin/test-email");
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setAdminSuccessMsg(`✅ Diagnostic test email sent successfully via ${data.provider}! Recipient: ${data.recipient || adminSettings.inquiryRecipient}`);
+      } else {
+        const errorDetail = data.rawError || data.error || data.message || JSON.stringify(data);
+        setAdminErrorMsg(`❌ Test Email Failed (${data.provider || "Provider"} HTTP ${data.statusCode || response.status}): ${errorDetail}`);
+      }
+    } catch (err: any) {
+      setAdminErrorMsg("Error invoking test email endpoint: " + err.message);
+    }
+  };
+
   const handleDeleteInquiry = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this inquiry?")) return;
     try {
@@ -281,9 +298,20 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                                   ✉️ {inq.email}
                                 </span>
                               )}
-                              <span className={`font-mono text-[9px] px-2 py-0.5 rounded border ${inq.dispatchStatus === "Delivered" ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"}`}>
+                              <span className={`font-mono text-[9px] px-2 py-0.5 rounded border font-bold ${
+                                inq.dispatchStatus === "Delivered" 
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                                  : inq.dispatchStatus === "Failed"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-100"
+                              }`}>
                                 📧 {inq.dispatchStatus}
                               </span>
+                              {inq.dispatchStatus === "Failed" && inq.dispatchError && (
+                                <span className="font-mono text-[9px] bg-rose-100 text-rose-800 px-2 py-0.5 border border-rose-300 rounded font-semibold break-all max-w-full">
+                                  ⚠️ Error: {inq.dispatchError}
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-slate-600 bg-slate-50/50 p-2 border-l-2 border-slate-300 rounded font-sans leading-relaxed">
                               {inq.message}
@@ -291,8 +319,12 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                             <div className="flex flex-wrap gap-4 font-mono text-[9px] text-slate-400 mt-1.5">
                               <span>📅 Submitted: {new Date(inq.timestamp).toLocaleString("en-IN")}</span>
                               <span>📡 Channel: {inq.dispatchedVia}</span>
-                              {inq.dispatchError && <span className="text-rose-500">❌ Error: {inq.dispatchError}</span>}
                             </div>
+                            {inq.dispatchError && (
+                              <div className="w-full text-rose-700 bg-rose-50 border border-rose-200 p-2 rounded text-[10px] font-mono mt-1 break-all">
+                                <strong>❌ Dispatch Error Detail:</strong> {inq.dispatchError}
+                              </div>
+                            )}
                           </div>
                           <div className="shrink-0 flex gap-2 w-full md:w-auto justify-end">
                             <a 
@@ -482,8 +514,16 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
                   </div>
 
-                  <div className="border-t border-slate-100 pt-4 flex justify-end gap-3">
+                  <div className="border-t border-slate-100 pt-4 flex flex-wrap justify-between items-center gap-3">
                     <button 
+                      type="button"
+                      onClick={handleTestEmail}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-mono text-xs font-bold uppercase tracking-wider py-2.5 px-4 rounded transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      🧪 Test Email Delivery
+                    </button>
+                    <button 
+                      type="button"
                       onClick={handleSaveSettings}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-wider py-2.5 px-6 rounded transition-colors cursor-pointer"
                     >

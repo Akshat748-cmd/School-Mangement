@@ -83,11 +83,7 @@ export default function Header({
   return (
     <header 
       id="navbar" 
-      className={`sticky top-0 z-50 transition-all duration-300 ${
-        isScrolled 
-          ? "bg-ink-navy/95 border-b border-brass-gold/20 shadow-md backdrop-blur-md" 
-          : "bg-ink-navy/30 border-b border-transparent shadow-none backdrop-blur-sm"
-      }`}
+      className="sticky top-0 z-50 transition-all duration-300 bg-ink-navy border-b border-brass-gold/20 shadow-md backdrop-blur-md"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className={`flex items-center justify-between transition-all duration-300 ${
