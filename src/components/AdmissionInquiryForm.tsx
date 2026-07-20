@@ -300,21 +300,21 @@ export default function AdmissionInquiryForm({
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, margin: "-80px" }}
-      className="py-10 sm:py-16 md:py-20 bg-muted-board px-4 sm:px-6 lg:px-8 w-full border-t border-border-custom"
+      className="py-6 sm:py-16 md:py-20 bg-muted-board px-4 sm:px-6 lg:px-8 w-full border-t border-border-custom"
     >
       <div className="max-w-7xl mx-auto">
 
-        <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-8 sm:mb-16">
+        <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-4 sm:mb-16">
           <span className="font-mono text-xs tracking-widest text-maroon font-semibold uppercase block mb-2">
             Get in Touch
           </span>
           <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl text-ink-navy font-bold tracking-tight">
             Visit or reach out
           </h2>
-          <div className="w-16 h-1 bg-brass-gold mx-auto mt-4"></div>
+          <div className="w-16 h-1 bg-brass-gold mx-auto mt-3 sm:mt-4"></div>
         </motion.div>
 
-        <motion.div variants={childVariants} className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-12 lg:gap-16">
+        <motion.div variants={childVariants} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-12 lg:gap-16">
 
           {/* Left: Contact Info Columns */}
           <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
@@ -682,7 +682,7 @@ export default function AdmissionInquiryForm({
         </motion.div>
 
         {/* Maps / Static Route Advice */}
-        <motion.div variants={childVariants} className="mt-8 sm:mt-16 bg-white p-4 border border-border-custom rounded-sm shadow-sm text-slate-800">
+        <motion.div variants={childVariants} className="mt-4 sm:mt-16 bg-white p-4 border border-border-custom rounded-sm shadow-sm text-slate-800">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex gap-3 items-center">
               <MapPin className="w-5 h-5 text-brass-gold shrink-0" />

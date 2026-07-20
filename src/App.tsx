@@ -131,7 +131,7 @@ export default function App() {
 
       {/* 3. THIN DASHED GOLD DIVIDER LINE */}
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="dashed-divider h-0.5 w-full opacity-65 my-4"></div>
+        <div className="dashed-divider h-0.5 w-full opacity-65 my-2 sm:my-4"></div>
       </div>
 
       {/* 4. NOTICE BOARD SECTION */}
@@ -141,9 +141,9 @@ export default function App() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: "-80px" }}
-        className="py-10 sm:py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full"
+        className="py-6 sm:py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full"
       >
-        <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-6 sm:mb-12">
+        <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-4 sm:mb-12">
           <span className="font-mono text-xs tracking-widest text-maroon font-semibold uppercase block mb-2">
             Notice Board
           </span>
@@ -163,7 +163,7 @@ export default function App() {
           {/* Subtle wooden texture styling background elements */}
           <div className="absolute inset-0 bg-opacity-5 pointer-events-none bg-[radial-gradient(#C9A227_1px,transparent_1px)] [background-size:16px_16px] opacity-10"></div>
 
-          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 lg:gap-10">
+          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 lg:gap-10">
 
             {/* CARD 1: Admission Open 2026–27 */}
             <motion.div
@@ -305,7 +305,7 @@ export default function App() {
           </div>
 
           {/* Quick Notice Board Footer/Tip */}
-          <div className="mt-8 text-center">
+          <div className="mt-4 sm:mt-8 text-center">
             <span className="font-mono text-[10px] text-muted-text uppercase tracking-widest">
               For manual application collection, please contact the administrative counter.
             </span>
@@ -320,11 +320,11 @@ export default function App() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: "-80px" }}
-        className="bg-ink-navy text-white py-10 sm:py-16 px-4 sm:px-6 lg:px-8 w-full"
+        className="bg-ink-navy text-white py-6 sm:py-16 px-4 sm:px-6 lg:px-8 w-full"
       >
         <div className="max-w-7xl mx-auto">
 
-          <motion.div variants={childVariants} className="mb-8 sm:mb-16 border-b border-brass-gold/20 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <motion.div variants={childVariants} className="mb-4 sm:mb-16 border-b border-brass-gold/20 pb-6 sm:pb-8 flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6">
             <div className="text-left">
               <span className="font-mono text-xs tracking-widest text-brass-gold uppercase block mb-2">
                 Why Choose AMPS
@@ -339,7 +339,7 @@ export default function App() {
           </motion.div>
 
           {/* Timetable Period Grid */}
-          <motion.div variants={childVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <motion.div variants={childVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
 
             {/* Period 01 */}
             <div className="border-l-2 border-brass-gold pl-6 py-2 flex flex-col justify-between text-left">
@@ -354,7 +354,7 @@ export default function App() {
                   AMPS consistently secures top-tier percentages and board rank scores in Karauli district year after year, building a trustworthy academic name.
                 </p>
               </div>
-              <div className="mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
+              <div className="mt-4 sm:mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
                 Academic Merit
               </div>
             </div>
@@ -372,7 +372,7 @@ export default function App() {
                   A structured school journey under one trust. We nurture children from foundational playgroups to high school senior streams.
                 </p>
               </div>
-              <div className="mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
+              <div className="mt-4 sm:mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
                 Comprehensive Path
               </div>
             </div>
@@ -390,7 +390,7 @@ export default function App() {
                   Customized classrooms for both mediums. We ensure Hindi medium students master concepts while refining vital English skills.
                 </p>
               </div>
-              <div className="mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
+              <div className="mt-4 sm:mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
                 Dual-Language Mastery
               </div>
             </div>
@@ -408,7 +408,7 @@ export default function App() {
                   We integrate IIT-JEE & NEET foundation modules early in Class XI & XII, reducing extra tuition costs and keeping focus aligned.
                 </p>
               </div>
-              <div className="mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
+              <div className="mt-4 sm:mt-6 text-[11px] font-mono text-brass-gold uppercase tracking-wider">
                 Competitive Ready
               </div>
             </div>
@@ -416,7 +416,7 @@ export default function App() {
           </motion.div>
 
           {/* timetable note card */}
-          <motion.div variants={childVariants} className="mt-8 sm:mt-16 bg-navy-light border border-brass-gold/25 p-4 sm:p-6 rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 text-left">
+          <motion.div variants={childVariants} className="mt-4 sm:mt-16 bg-navy-light border border-brass-gold/25 p-4 sm:p-6 rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6 text-left">
             <div className="flex gap-4 items-start">
               <GraduationCap className="w-10 h-10 text-brass-gold shrink-0 mt-1" />
               <div>
@@ -443,13 +443,13 @@ export default function App() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="bg-muted-board/40 border-y border-border-custom py-6 sm:py-12 px-4 sm:px-6 lg:px-8 w-full"
+        className="bg-muted-board/40 border-y border-border-custom py-4 sm:py-12 px-4 sm:px-6 lg:px-8 w-full"
       >
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4 divide-y md:divide-y-0 md:divide-x divide-border-custom/80">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-4 divide-y md:divide-y-0 md:divide-x divide-border-custom/80">
 
             {/* Stat 1 */}
-            <div className="text-center px-4 flex flex-col items-center justify-center pt-6 md:pt-0">
+            <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
               <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
                 <Counter value={21} suffix="+" />
               </span>
@@ -459,7 +459,7 @@ export default function App() {
             </div>
 
             {/* Stat 2 */}
-            <div className="text-center px-4 flex flex-col items-center justify-center pt-6 md:pt-0">
+            <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
               <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
                 <Counter value={3} />
               </span>
@@ -469,7 +469,7 @@ export default function App() {
             </div>
 
             {/* Stat 3 */}
-            <div className="text-center px-4 flex flex-col items-center justify-center pt-6 md:pt-0">
+            <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
               <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
                 <Counter value={2} />
               </span>
@@ -479,7 +479,7 @@ export default function App() {
             </div>
 
             {/* Stat 4 */}
-            <div className="text-center px-4 flex flex-col items-center justify-center pt-6 md:pt-0">
+            <div className="text-center px-4 flex flex-col items-center justify-center pt-3 md:pt-0">
               <span className="font-serif text-4xl md:text-5xl text-maroon font-bold mb-2">
                 P.G–XII
               </span>
@@ -510,10 +510,10 @@ export default function App() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: "-80px" }}
-        className="py-10 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-border-custom bg-white w-full"
+        className="py-6 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-border-custom bg-white w-full"
       >
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-12 lg:gap-16 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-12 lg:gap-16 items-center">
 
             {/* Left Column (Academic Group Photo/Image) */}
             <motion.div variants={childVariants} className="lg:col-span-5 order-last lg:order-first">
@@ -538,7 +538,7 @@ export default function App() {
             </motion.div>
 
             {/* Right Column (Text details) */}
-            <motion.div variants={childVariants} className="lg:col-span-7 flex flex-col space-y-6 text-left">
+            <motion.div variants={childVariants} className="lg:col-span-7 flex flex-col space-y-4 sm:space-y-6 text-left">
 
               <div>
                 <span className="font-mono text-xs tracking-widest text-brass-gold uppercase block mb-2 font-semibold">
@@ -559,7 +559,7 @@ export default function App() {
               </div>
 
               {/* Core Values checklist block */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 sm:pt-4">
                 <div className="flex items-center gap-2.5 text-body-text">
                   <div className="w-5 h-5 rounded-full bg-brass-gold/15 flex items-center justify-center text-brass-gold shrink-0">
                     <span className="text-xs">✓</span>
@@ -599,11 +599,11 @@ export default function App() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: "-80px" }}
-        className="py-10 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-border-custom bg-ivory-paper w-full"
+        className="py-6 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-border-custom bg-ivory-paper w-full"
       >
         <div className="max-w-7xl mx-auto">
 
-          <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-8 sm:mb-16">
+          <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-4 sm:mb-16">
             <span className="font-mono text-xs tracking-widest text-brass-gold font-semibold uppercase block mb-2">
               Our Foundations
             </span>
@@ -613,10 +613,10 @@ export default function App() {
             <p className="font-serif text-sm text-muted-text italic mt-2">
               हमारा दृष्टिकोण और उद्देश्य - शिक्षित, संस्कारित और सशक्त राष्ट्र निर्माण
             </p>
-            <div className="w-16 h-1 bg-brass-gold mx-auto mt-4"></div>
+            <div className="w-16 h-1 bg-brass-gold mx-auto mt-3 sm:mt-4"></div>
           </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-12 lg:gap-16 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-12 lg:gap-16 items-center">
 
             {/* Left Column (Original Principal Image & Inspirational Quote) */}
             <motion.div variants={childVariants} className="lg:col-span-5 flex flex-col items-center">

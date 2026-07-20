@@ -54,7 +54,7 @@ export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: Hero
       {/* 2. HERO SECTION */}
       <section
         id="hero"
-        className="relative py-10 sm:py-16 md:py-24 overflow-hidden px-4 sm:px-6 lg:px-8 w-full min-h-[60vh] flex items-center bg-cover bg-center bg-no-repeat"
+        className="relative py-6 sm:py-16 md:py-24 overflow-hidden px-4 sm:px-6 lg:px-8 w-full min-h-[50vh] sm:min-h-[60vh] flex items-center bg-cover bg-center bg-no-repeat"
         style={{ 
           backgroundImage: "url('/assets/school-building-2.jpeg?v=2')",
           backgroundPositionY: `${scrollY * 0.15}px`
@@ -68,7 +68,7 @@ export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: Hero
             variants={containerVariants}
             initial="hidden"
             animate="visible"
-            className="max-w-3xl flex flex-col space-y-5"
+            className="max-w-3xl flex flex-col space-y-3.5 sm:space-y-5"
           >
 
             <motion.div variants={itemVariants} className="flex flex-wrap gap-2 items-center">
@@ -83,7 +83,7 @@ export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: Hero
               </span>
             </motion.div>
 
-            <motion.div variants={itemVariants} className="space-y-3">
+            <motion.div variants={itemVariants} className="space-y-2 sm:space-y-3">
               <h1 className="font-serif text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-white font-bold leading-tight tracking-tight drop-shadow-sm">
                 For a better tomorrow, <br className="hidden sm:inline" />
                 <span className="italic text-brass-gold font-semibold block mt-1 drop-shadow-sm">
@@ -121,7 +121,7 @@ export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: Hero
               </motion.a>
             </motion.div>
 
-            <motion.div variants={itemVariants} className="grid grid-cols-3 gap-4 pt-5 border-t border-white/15 max-w-md">
+            <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3 sm:gap-4 pt-3.5 sm:pt-5 border-t border-white/15 max-w-md">
               <div>
                 <p className="font-serif text-xl font-bold text-white">100%</p>
                 <p className="font-mono text-[9px] text-gray-300 uppercase tracking-wider">Board Success</p>

@@ -13,8 +13,8 @@ export default function Footer({
   setIsMediaModalOpen
 }: FooterProps) {
   return (
-    <footer className="bg-ink-navy border-t border-brass-gold/25 py-12 px-4 sm:px-6 lg:px-8 w-full mt-auto text-white">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+    <footer className="bg-ink-navy border-t border-brass-gold/25 py-6 sm:py-12 px-4 sm:px-6 lg:px-8 w-full mt-auto text-white">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 sm:gap-6">
         
         {/* Logo & Info */}
         <div className="flex items-center gap-3">

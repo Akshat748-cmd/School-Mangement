@@ -31,9 +31,9 @@ export default function LeadershipSection() {
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, margin: "-80px" }}
-      className="py-10 sm:py-16 md:py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full"
+      className="py-6 sm:py-16 md:py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full"
     >
-      <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-8 sm:mb-16">
+      <motion.div variants={childVariants} className="text-center max-w-2xl mx-auto mb-4 sm:mb-16">
         <span className="font-mono text-xs tracking-widest text-maroon font-semibold uppercase block mb-2">
           Leadership
         </span>
