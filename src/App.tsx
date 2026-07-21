@@ -24,6 +24,7 @@ import CurriculumModal from "./components/CurriculumModal";
 import SafetyMandateModal from "./components/SafetyMandateModal";
 import InquiryModal from "./components/InquiryModal";
 import StreamAdvisoryModal from "./components/StreamAdvisoryModal";
+import AboutSchoolModal from "./components/AboutSchoolModal";
 
 // Reusable Count-Up Counter Component
 function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
@@ -89,6 +90,7 @@ export default function App() {
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [inquiryPresetMessage, setInquiryPresetMessage] = useState("");
   const [inquiryFormContext, setInquiryFormContext] = useState<"admission" | "counselling">("admission");
 
@@ -130,7 +132,11 @@ export default function App() {
       />
 
       {/* 2. HERO SECTION (including NEET Special Highlight) */}
-      <Hero setSelectedGalleryImg={setSelectedGalleryImg} onOpenInquiryModal={handleOpenAdmissionInquiry} />
+      <Hero 
+        setSelectedGalleryImg={setSelectedGalleryImg} 
+        onOpenInquiryModal={handleOpenAdmissionInquiry} 
+        onOpenAboutModal={() => setIsAboutModalOpen(true)} 
+      />
 
       {/* 3. THIN DASHED GOLD DIVIDER LINE */}
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -777,6 +783,13 @@ export default function App() {
       <FaqModal
         isOpen={isFaqModalOpen}
         onClose={() => setIsFaqModalOpen(false)}
+        onOpenInquiryModal={handleOpenAdmissionInquiry}
+      />
+
+      {/* 16. ABOUT SCHOOL DETAIL MODAL */}
+      <AboutSchoolModal
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
         onOpenInquiryModal={handleOpenAdmissionInquiry}
       />
 

@@ -5,9 +5,10 @@ import { motion } from "motion/react";
 interface HeroProps {
   setSelectedGalleryImg: (img: any) => void;
   onOpenInquiryModal?: () => void;
+  onOpenAboutModal?: () => void;
 }
 
-export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: HeroProps) {
+export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal, onOpenAboutModal }: HeroProps) {
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -97,14 +98,19 @@ export default function Hero({ setSelectedGalleryImg, onOpenInquiryModal }: Hero
             </motion.p>
 
             <motion.div variants={itemVariants} className="flex flex-wrap gap-3 pt-1">
-              <motion.a
+              <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                href="#about"
-                className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 px-5 py-2.5 rounded-sm font-sans font-bold text-xs md:text-sm tracking-wide shadow-md transition-all duration-200"
+                onClick={(e) => {
+                  if (onOpenAboutModal) {
+                    e.preventDefault();
+                    onOpenAboutModal();
+                  }
+                }}
+                className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 px-5 py-2.5 rounded-sm font-sans font-bold text-xs md:text-sm tracking-wide shadow-md transition-all duration-200 cursor-pointer border-none"
               >
                 Explore the School
-              </motion.a>
+              </motion.button>
               <motion.a
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}

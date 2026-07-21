@@ -17,16 +17,16 @@ export default function Footer({
   return (
     <footer className="bg-ink-navy border-t border-brass-gold/25 py-6 sm:py-12 px-4 sm:px-6 lg:px-8 w-full mt-auto text-white">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 sm:gap-6">
-        
+
         {/* Logo & Info */}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full border border-brass-gold overflow-hidden bg-white flex items-center justify-center shrink-0">
             {logoError ? (
               <SchoolLogo className="w-full h-full" />
             ) : (
-              <img 
-                src="/assets/logo.jpeg?v=2" 
-                alt="AMPS Crest Small" 
+              <img
+                src="/assets/logo.jpeg?v=2"
+                alt="AMPS Crest Small"
                 onError={() => setLogoError(true)}
                 loading="lazy"
                 className="w-full h-full object-cover"
@@ -45,12 +45,12 @@ export default function Footer({
         </div>
 
         {/* Quick links to sections */}
-        <div className="hidden sm:flex flex-nowrap gap-x-3 sm:gap-x-4 text-xs font-mono text-white/70 justify-center whitespace-nowrap">
+        <div className="hidden sm:flex flex-nowrap gap-x-3 sm:gap-x-4 md:gap-x-6 text-xs font-mono text-white/70 justify-center whitespace-nowrap">
           <a href="#notices" className="hover:text-brass-gold transition-colors">NOTICES</a>
           <span>·</span>
           <a href="#about" className="hover:text-brass-gold transition-colors">ABOUT</a>
           <span>·</span>
-          <button 
+          <button
             onClick={() => setIsMediaModalOpen(true)}
             className="hover:text-brass-gold transition-colors cursor-pointer text-xs font-mono text-white/70 bg-transparent border-none p-0 outline-none uppercase font-mono"
           >
@@ -59,7 +59,7 @@ export default function Footer({
           <span>·</span>
           {setIsFaqModalOpen && (
             <>
-              <button 
+              <button
                 onClick={() => setIsFaqModalOpen(true)}
                 className="hover:text-brass-gold transition-colors cursor-pointer text-xs font-mono text-white/70 bg-transparent border-none p-0 outline-none uppercase font-mono"
               >
