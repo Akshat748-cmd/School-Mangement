@@ -5,6 +5,19 @@ import nodemailer from "nodemailer";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+
+declare global {
+  namespace Express {
+    interface Request {
+      admin?: {
+        username: string;
+        role: string;
+      };
+    }
+  }
+}
 
 // Load environment variables
 dotenv.config();
@@ -43,7 +56,10 @@ db.exec(`
     timestamp TEXT NOT NULL,
     dispatchedVia TEXT,
     dispatchStatus TEXT,
-    dispatchError TEXT
+    dispatchError TEXT,
+    isRead INTEGER DEFAULT 0,
+    context TEXT DEFAULT 'admission',
+    status TEXT DEFAULT 'pending'
   );
 
   CREATE TABLE IF NOT EXISTS otps (
@@ -58,7 +74,254 @@ db.exec(`
     email TEXT NOT NULL,
     timestamp INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS admin_users (
+    username TEXT PRIMARY KEY,
+    passwordHash TEXT NOT NULL,
+    role TEXT NOT NULL,
+    mustChangePassword INTEGER DEFAULT 1,
+    createdAt TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS admin_sessions (
+    token TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    role TEXT NOT NULL,
+    createdAt INTEGER,
+    lastActivity INTEGER,
+    expiresAt INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS password_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    role TEXT,
+    newPassword TEXT,
+    changedAt TEXT
+  );
 `);
+
+// Safe migration: Add columns to inquiries table if they do not exist
+try {
+  db.exec("ALTER TABLE inquiries ADD COLUMN isRead INTEGER DEFAULT 0");
+  console.log("[DB Migration] Added column isRead to inquiries table.");
+} catch (e: any) {
+  if (!e.message.includes("duplicate column name")) {
+    console.error("[DB Migration Error] isRead:", e.message);
+  }
+}
+
+try {
+  db.exec("ALTER TABLE inquiries ADD COLUMN context TEXT DEFAULT 'admission'");
+  console.log("[DB Migration] Added column context to inquiries table.");
+} catch (e: any) {
+  if (!e.message.includes("duplicate column name")) {
+    console.error("[DB Migration Error] context:", e.message);
+  }
+}
+
+try {
+  db.exec("ALTER TABLE inquiries ADD COLUMN status TEXT DEFAULT 'pending'");
+  console.log("[DB Migration] Added column status to inquiries table.");
+} catch (e: any) {
+  if (!e.message.includes("duplicate column name")) {
+    console.error("[DB Migration Error] status:", e.message);
+  }
+}
+
+// Backfill context for existing inquiries to resolve defaulted/incorrect values
+try {
+  const rows = db.prepare("SELECT id, message, context FROM inquiries WHERE context IS NULL OR context = '' OR context = 'admission'").all() as { id: string; message: string; context: string }[];
+  if (rows.length > 0) {
+    const updateStmt = db.prepare("UPDATE inquiries SET context = ? WHERE id = ?");
+    let backfilledCount = 0;
+    db.transaction(() => {
+      for (const row of rows) {
+        const isCounselling = typeof row.message === "string" && (
+          row.message.toLowerCase().includes("counselling") || 
+          row.message.toLowerCase().includes("stream selection")
+        );
+        const resolvedContext = isCounselling ? "counselling" : "admission";
+        if (row.context !== resolvedContext || !row.context) {
+          updateStmt.run(resolvedContext, row.id);
+          backfilledCount++;
+        }
+      }
+    })();
+    if (backfilledCount > 0) {
+      console.log(`[Migration] Backfilled context for ${backfilledCount} existing inquiries.`);
+    }
+  }
+} catch (err: any) {
+  console.error("[DB Migration Error] Backfilling context failed:", err.message);
+}
+
+function generateTempPassword(): string {
+  return crypto.randomBytes(6).toString("hex");
+}
+
+function updateActiveCredentialsFile(username: string, role: string, plaintextPassword: string) {
+  if (process.env.NODE_ENV === "production") return;
+  const filePath = path.join(process.cwd(), "active-admin-credentials.local.txt");
+  let credentialsMap: Record<string, { role: string; password: string; updatedAt: string }> = {};
+
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8");
+      const sections = content.split("------------------------------------------------------------");
+      for (const section of sections) {
+        const lines = section.split("\n");
+        let u = "";
+        let r = "";
+        let p = "";
+        let t = "";
+        for (const line of lines) {
+          if (line.trim().startsWith("Username: ")) u = line.replace("Username: ", "").trim().toLowerCase();
+          if (line.trim().startsWith("Role: ")) r = line.replace("Role: ", "").trim();
+          if (line.trim().startsWith("Password: ")) p = line.replace("Password: ", "").trim();
+          if (line.trim().startsWith("Last Updated: ")) t = line.replace("Last Updated: ", "").trim();
+        }
+        if (u && p) {
+          credentialsMap[u] = { role: r, password: p, updatedAt: t };
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn("Failed to parse existing active credentials file, starting fresh:", err.message);
+  }
+
+  const nowIst = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " (IST)";
+  credentialsMap[username.toLowerCase().trim()] = {
+    role,
+    password: plaintextPassword,
+    updatedAt: nowIst
+  };
+
+  try {
+    let output = "============================================================\n";
+    output += "ACTIVE ADMIN & SUPERADMIN PORTAL CREDENTIALS\n";
+    output += `Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (IST)\n`;
+    output += "============================================================\n\n";
+
+    const entries = Object.entries(credentialsMap);
+    for (let i = 0; i < entries.length; i++) {
+      const [u, data] = entries[i];
+      output += `Username: ${u}\n`;
+      output += `Role: ${data.role}\n`;
+      output += `Password: ${data.password}\n`;
+      output += `Last Updated: ${data.updatedAt}\n`;
+      if (i < entries.length - 1) {
+        output += "------------------------------------------------------------\n";
+      }
+    }
+
+    fs.writeFileSync(filePath, output, "utf8");
+  } catch (err: any) {
+    console.warn("Failed to write active credentials file:", err.message);
+  }
+}
+
+function logPasswordChange(username: string, role: string, newPassword: string) {
+  const dbTime = new Date().toISOString();
+  const fileTime = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " (IST)";
+  try {
+    db.prepare("INSERT INTO password_history (username, role, newPassword, changedAt) VALUES (?, ?, ?, ?)")
+      .run(username, role, newPassword, dbTime);
+
+    if (process.env.NODE_ENV !== "production") {
+      const logLine = `[${fileTime}] ${role} (${username}) password set to: ${newPassword}\n`;
+      fs.appendFileSync(path.join(process.cwd(), "admin-credentials.local.txt"), logLine, "utf8");
+
+      // Also update active credentials
+      updateActiveCredentialsFile(username, role, newPassword);
+    }
+  } catch (err: any) {
+    console.warn(`[Security Warning] Failed to write password change to local file mirror: ${err.message}`);
+  }
+}
+
+// One-time seed migration for admin accounts
+try {
+  const userCount = (db.prepare("SELECT COUNT(*) as count FROM admin_users").get() as { count: number }).count;
+  if (userCount === 0) {
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync("ampsadmin", salt);
+    const insertStmt = db.prepare(
+      "INSERT INTO admin_users (username, passwordHash, role, mustChangePassword, createdAt) VALUES (?, ?, ?, 1, ?)"
+    );
+    db.transaction(() => {
+      const nowIso = new Date().toISOString();
+      insertStmt.run("chairman", hash, "Chairman", nowIso);
+      insertStmt.run("administrator", hash, "Administrator", nowIso);
+      insertStmt.run("principal", hash, "Principal", nowIso);
+    })();
+    updateActiveCredentialsFile("chairman", "Chairman", "ampsadmin");
+    updateActiveCredentialsFile("administrator", "Administrator", "ampsadmin");
+    updateActiveCredentialsFile("principal", "Principal", "ampsadmin");
+    console.log("[Security] 3 admin accounts created with temporary password 'ampsadmin'. Each MUST change their password on first login. Usernames: chairman, administrator, principal");
+  }
+} catch (err: any) {
+  console.error("[DB Migration Error] Seeding admin accounts failed:", err.message);
+}
+
+// Seeding migration for superadmin account (independent)
+try {
+  const superadminExists = db.prepare("SELECT username FROM admin_users WHERE username = 'superadmin'").get();
+  if (!superadminExists) {
+    const tempPassword = generateTempPassword();
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(tempPassword, salt);
+    const nowIso = new Date().toISOString();
+
+    db.prepare("INSERT INTO admin_users (username, passwordHash, role, mustChangePassword, createdAt) VALUES ('superadmin', ?, 'Superadmin', 1, ?)")
+      .run(hash, nowIso);
+
+    logPasswordChange("superadmin", "Superadmin", tempPassword);
+
+    console.log("=".repeat(60));
+    console.log("[Security] Superadmin account created with TEMPORARY password:");
+    console.log(`  ${tempPassword}`);
+    console.log(" Username: superadmin");
+    console.log(" This password will NOT be shown again in the console.");
+    console.log("=".repeat(60));
+  }
+} catch (err: any) {
+  console.error("[DB Migration Error] Seeding superadmin failed:", err.message);
+}
+
+// Sync password_history with active-admin-credentials.local.txt for missing records
+try {
+  if (process.env.NODE_ENV !== "production") {
+    const filePath = path.join(process.cwd(), "active-admin-credentials.local.txt");
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8");
+      const sections = content.split("------------------------------------------------------------");
+      const nowIso = new Date().toISOString();
+      
+      for (const section of sections) {
+        const lines = section.split("\n");
+        let u = "";
+        let r = "";
+        let p = "";
+        for (const line of lines) {
+          if (line.trim().startsWith("Username: ")) u = line.replace("Username: ", "").trim().toLowerCase();
+          if (line.trim().startsWith("Role: ")) r = line.replace("Role: ", "").trim();
+          if (line.trim().startsWith("Password: ")) p = line.replace("Password: ", "").trim();
+        }
+        if (u && p && r) {
+          const exists = db.prepare("SELECT id FROM password_history WHERE username = ?").get(u);
+          if (!exists) {
+            db.prepare("INSERT INTO password_history (username, role, newPassword, changedAt) VALUES (?, ?, ?, ?)")
+              .run(u, r, p, nowIso);
+            console.log(`[DB Migration] Backfilled initial password history for ${u}.`);
+          }
+        }
+      }
+    }
+  }
+} catch (err: any) {
+  console.error("[DB Migration Error] Backfilling password history failed:", err.message);
+}
 
 // Default Configuration Settings
 const DEFAULT_SETTINGS = {
@@ -144,6 +407,7 @@ function getResolvedConfig() {
   const dbSettings = readSettings();
   return {
     ...dbSettings,
+    adminPassword: process.env.ADMIN_PASSWORD || dbSettings.adminPassword || "ampsadmin",
     emailProvider: process.env.EMAIL_PROVIDER || dbSettings.emailProvider,
     inquiryRecipient: process.env.INQUIRY_RECIPIENT_EMAIL || dbSettings.inquiryRecipient || "admin@example.com",
     brevoApiKey: process.env.BREVO_API_KEY || dbSettings.brevoApiKey,
@@ -187,8 +451,8 @@ function saveInquiries(inquiries: any[]) {
     const deleteStmt = db.prepare("DELETE FROM inquiries");
     const insertStmt = db.prepare(`
       INSERT OR REPLACE INTO inquiries (
-        id, name, phone, email, message, timestamp, dispatchedVia, dispatchStatus, dispatchError
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, phone, email, message, timestamp, dispatchedVia, dispatchStatus, dispatchError, isRead, context, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     db.transaction((list: any[]) => {
@@ -203,7 +467,10 @@ function saveInquiries(inquiries: any[]) {
           inq.timestamp,
           inq.dispatchedVia || "",
           inq.dispatchStatus || "",
-          inq.dispatchError || ""
+          inq.dispatchError || "",
+          inq.isRead !== undefined ? inq.isRead : 0,
+          inq.context || "admission",
+          inq.status || "pending"
         );
       }
     })(inquiries);
@@ -212,6 +479,102 @@ function saveInquiries(inquiries: any[]) {
   } catch (err) {
     console.error("[DB] Error saving inquiries to SQLite:", err);
     return false;
+  }
+}
+
+function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, message: "Unauthorized. Missing token." });
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const session = db.prepare("SELECT username, role, expiresAt, lastActivity FROM admin_sessions WHERE token = ?").get(token) as {
+      username: string;
+      role: string;
+      expiresAt: number;
+      lastActivity: number;
+    } | undefined;
+
+    if (!session) {
+      return res.status(401).json({ success: false, message: "Unauthorized. Invalid session." });
+    }
+
+    const now = Date.now();
+    // Check if session has expired or if inactive for > 20 mins (1,200,000 ms)
+    if (now > session.expiresAt || (now - session.lastActivity) > 20 * 60 * 1000) {
+      db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
+      return res.status(401).json({ success: false, message: "Session expired. Please log in again." });
+    }
+
+    // Sliding renewal
+    const newExpiresAt = now + 20 * 60 * 1000;
+    db.prepare("UPDATE admin_sessions SET lastActivity = ?, expiresAt = ? WHERE token = ?").run(now, newExpiresAt, token);
+
+    req.admin = {
+      username: session.username,
+      role: session.role
+    };
+    next();
+  } catch (err: any) {
+    console.error("[Auth Error] Session validation failed:", err.message);
+    res.status(500).json({ success: false, message: "Authentication database error." });
+  }
+}
+
+function requireSuperAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.admin?.role !== "Superadmin") {
+    return res.status(403).json({ success: false, message: "Superadmin access required." });
+  }
+  next();
+}
+
+interface LoginAttempt {
+  failedCount: number;
+  blockUntil: number;
+}
+
+const loginAttempts: Record<string, LoginAttempt> = {};
+
+function rateLimitLogin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+  const now = Date.now();
+  const attempt = loginAttempts[ip];
+
+  if (attempt && attempt.blockUntil > now) {
+    const timeLeft = Math.ceil((attempt.blockUntil - now) / 60000);
+    return res.status(429).json({
+      success: false,
+      message: `Too many failed login attempts. Please try again in ${timeLeft} minute(s).`
+    });
+  }
+
+  next();
+}
+
+function recordFailedLogin(ip: string) {
+  const now = Date.now();
+  if (!loginAttempts[ip]) {
+    loginAttempts[ip] = { failedCount: 0, blockUntil: 0 };
+  }
+  const attempt = loginAttempts[ip];
+  attempt.failedCount += 1;
+  if (attempt.failedCount >= 5) {
+    attempt.blockUntil = now + 15 * 60 * 1000; // 15 mins block
+    attempt.failedCount = 0; // reset counter
+  }
+}
+
+
+function cleanExpiredSessions() {
+  try {
+    const result = db.prepare("DELETE FROM admin_sessions WHERE expiresAt < ?").run(Date.now());
+    if (result.changes > 0) {
+      console.log(`[Security] Cleaned up ${result.changes} expired admin sessions.`);
+    }
+  } catch (err: any) {
+    console.error("[Security Error] Session cleanup failed:", err.message);
   }
 }
 
@@ -231,6 +594,10 @@ async function startServer() {
     }
   }
 
+  // Session Cleanup startup and interval
+  cleanExpiredSessions();
+  setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+
   // Middleware to parse JSON
   app.use(express.json());
 
@@ -243,19 +610,15 @@ async function startServer() {
   });
 
   // 2. API: Get Settings
-  app.get("/api/admin/settings", (req, res) => {
+  app.get("/api/admin/settings", requireAdminAuth, requireSuperAdmin, (req, res) => {
     const settings = getResolvedConfig();
     res.json({ success: true, settings });
   });
 
   // 3. API: Save Settings
-  app.post("/api/admin/settings", (req, res) => {
-    const { password, settings } = req.body;
+  app.post("/api/admin/settings", requireAdminAuth, requireSuperAdmin, (req, res) => {
+    const { settings } = req.body;
     const currentSettings = readSettings();
-
-    if (password !== currentSettings.adminPassword) {
-      return res.status(403).json({ success: false, message: "Invalid admin password." });
-    }
 
     const updated = { ...currentSettings, ...settings };
     if (saveSettings(updated)) {
@@ -266,27 +629,17 @@ async function startServer() {
   });
 
   // 4. API: Get Inquiries (Admin Panel)
-  app.post("/api/admin/inquiries", (req, res) => {
-    const { password } = req.body;
-    const settings = getResolvedConfig();
-
-    if (password !== settings.adminPassword) {
-      return res.status(403).json({ success: false, message: "Access Denied. Incorrect admin password." });
-    }
-
+  app.post("/api/admin/inquiries", requireAdminAuth, (req, res) => {
     const inquiries = readInquiries();
     res.json({ success: true, inquiries });
   });
 
   // 5. API: Delete/Clear Inquiries
-  app.post("/api/admin/clear-inquiries", (req, res) => {
-    const { password, id } = req.body;
-    const settings = getResolvedConfig();
-
-    if (password !== settings.adminPassword) {
-      return res.status(403).json({ success: false, message: "Access Denied." });
+  app.post("/api/admin/clear-inquiries", requireAdminAuth, (req, res) => {
+    const { id } = req.body;
+    if (!id && req.admin?.role !== "Superadmin") {
+      return res.status(403).json({ success: false, message: "Superadmin access required for full database wipe." });
     }
-
     let inquiries = readInquiries();
     if (id) {
       inquiries = inquiries.filter((inq: any) => inq.id !== id);
@@ -301,8 +654,138 @@ async function startServer() {
     }
   });
 
+  // 5.1 API: Mark Inquiry as Read
+  app.post("/api/admin/mark-read", requireAdminAuth, (req, res) => {
+    const { id } = req.body;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "ID is required." });
+    }
+
+    try {
+      const result = db.prepare("UPDATE inquiries SET isRead = 1 WHERE id = ?").run(id);
+      if (result.changes > 0) {
+        res.json({ success: true, message: "Inquiry marked as read." });
+      } else {
+        res.status(404).json({ success: false, message: "Inquiry not found." });
+      }
+    } catch (err: any) {
+      console.error("[DB Error] Failed to mark inquiry as read:", err.message);
+      res.status(500).json({ success: false, message: "Database error." });
+    }
+  });
+
+  // 5.1.1 API: Update Inquiry Status
+  app.post("/api/admin/update-status", requireAdminAuth, (req, res) => {
+    const { inquiryId, status } = req.body;
+    if (!inquiryId || !status) {
+      return res.status(400).json({ success: false, message: "inquiryId and status are required." });
+    }
+    const validStatuses = ["pending", "contacted", "done"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status value." });
+    }
+
+    try {
+      const result = db.prepare("UPDATE inquiries SET status = ? WHERE id = ?").run(status, inquiryId);
+      if (result.changes > 0) {
+        res.json({ success: true, message: `Inquiry status updated to ${status}.` });
+      } else {
+        res.status(404).json({ success: false, message: "Inquiry not found." });
+      }
+    } catch (err: any) {
+      console.error("[DB Error] Failed to update inquiry status:", err.message);
+      res.status(500).json({ success: false, message: "Database error." });
+    }
+  });
+
+  // 5.2 API: Analytics Dashboard
+  app.post("/api/admin/analytics", requireAdminAuth, (req, res) => {
+
+    try {
+      // 1. Overall stats
+      const stats = db.prepare(`
+        SELECT 
+          (SELECT COUNT(*) FROM inquiries) as totalInquiries,
+          (SELECT COUNT(*) FROM inquiries WHERE isRead = 0) as unreadCount,
+          (SELECT COUNT(*) FROM inquiries WHERE date(timestamp) >= date('now', '-6 days')) as last7Days,
+          (SELECT COUNT(*) FROM inquiries WHERE date(timestamp) >= date('now', '-29 days')) as last30Days
+      `).get() as { totalInquiries: number; unreadCount: number; last7Days: number; last30Days: number };
+
+      // 2. By context
+      const contextRows = db.prepare(`
+        SELECT context, COUNT(*) as count 
+        FROM inquiries 
+        GROUP BY context
+      `).all() as { context: string; count: number }[];
+
+      const byContext = { admission: 0, counselling: 0 };
+      for (const r of contextRows) {
+        if (r.context === "counselling") {
+          byContext.counselling = r.count;
+        } else {
+          byContext.admission += r.count;
+        }
+      }
+
+      // 3. By dispatch status
+      const statusRows = db.prepare(`
+        SELECT dispatchStatus, COUNT(*) as count 
+        FROM inquiries 
+        GROUP BY dispatchStatus
+      `).all() as { dispatchStatus: string; count: number }[];
+
+      const byDispatchStatus: { [status: string]: number } = {};
+      for (const r of statusRows) {
+        const s = r.dispatchStatus || "Unknown";
+        byDispatchStatus[s] = r.count;
+      }
+
+      // 4. Daily counts for the last 30 days (0-filled)
+      const dailyCounts: { date: string; count: number }[] = [];
+      const dateToCountMap = new Map<string, number>();
+
+      const dailyRows = db.prepare(`
+        SELECT date(timestamp) as date_day, COUNT(*) as count 
+        FROM inquiries 
+        WHERE date(timestamp) >= date('now', '-29 days') 
+        GROUP BY date_day
+      `).all() as { date_day: string; count: number }[];
+
+      for (const r of dailyRows) {
+        if (r.date_day) {
+          dateToCountMap.set(r.date_day, r.count);
+        }
+      }
+
+      // Populate for last 30 days
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0]; // YYYY-MM-DD
+        dailyCounts.push({
+          date: dateStr,
+          count: dateToCountMap.get(dateStr) || 0
+        });
+      }
+
+      res.json({
+        success: true,
+        totalInquiries: stats.totalInquiries,
+        unreadCount: stats.unreadCount,
+        last7Days: stats.last7Days,
+        last30Days: stats.last30Days,
+        byContext,
+        byDispatchStatus,
+        dailyCounts
+      });
+    } catch (err: any) {
+      console.error("[DB Error] Failed to generate analytics:", err.message);
+      res.status(500).json({ success: false, message: "Internal server error." });
+    }
+  });
+
   // 6. API: Diagnostic Test Email Endpoint
-  app.get("/api/admin/test-email", async (req, res) => {
+  app.get("/api/admin/test-email", requireAdminAuth, async (req, res) => {
     const config = getResolvedConfig();
     const { emailProvider, inquiryRecipient, brevoApiKey, brevoSenderEmail, brevoSenderName, web3formsKey, smtpHost, smtpPort, smtpUser, smtpPass } = config;
 
@@ -794,7 +1277,10 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       dispatchedVia: clientDispatched ? "Browser AJAX (Direct)" : "local_only",
       dispatchStatus: clientDispatched ? (clientStatus || "Delivered") : "Pending",
-      dispatchError: clientDispatched ? (clientError || "") : ""
+      dispatchError: clientDispatched ? (clientError || "") : "",
+      isRead: 0,
+      context: resolvedContext,
+      status: "pending"
     };
 
     const config = getResolvedConfig();
@@ -1106,6 +1592,266 @@ async function startServer() {
         `_Inquiry successfully stored in website log database._`
       )
     });
+  });
+
+  // 6.1 API: Admin Login
+  app.post("/api/admin/login", rateLimitLogin, (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: "Username and password are required." });
+    }
+
+    const genericError = "Invalid username or password";
+    const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+
+    try {
+      const user = db.prepare("SELECT username, passwordHash, role, mustChangePassword FROM admin_users WHERE username = ?").get(username.toLowerCase()) as {
+        username: string;
+        passwordHash: string;
+        role: string;
+        mustChangePassword: number;
+      } | undefined;
+
+      if (!user) {
+        recordFailedLogin(ip);
+        return res.status(401).json({ success: false, message: genericError });
+      }
+
+      const matches = bcrypt.compareSync(password, user.passwordHash);
+      if (!matches) {
+        recordFailedLogin(ip);
+        return res.status(401).json({ success: false, message: genericError });
+      }
+
+      // Clear limits on successful authentication
+      if (loginAttempts[ip]) {
+        delete loginAttempts[ip];
+      }
+
+      const token = crypto.randomUUID();
+      const now = Date.now();
+      const expiresAt = now + 20 * 60 * 1000;
+
+      db.prepare("INSERT INTO admin_sessions (token, username, role, createdAt, lastActivity, expiresAt) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(token, user.username, user.role, now, now, expiresAt);
+
+      res.json({
+        success: true,
+        token,
+        username: user.username,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword === 1
+      });
+    } catch (err: any) {
+      console.error("[Login Error] Login failed:", err.message);
+      res.status(500).json({ success: false, message: "Server login error." });
+    }
+  });
+
+  // 6.2 API: Admin Change Password
+  app.post("/api/admin/change-password", requireAdminAuth, (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const username = req.admin?.username;
+
+    if (!username) {
+      return res.status(401).json({ success: false, message: "Unauthorized." });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: "Current password and new password are required." });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: "New password must be at least 8 characters long." });
+    }
+
+    try {
+      const user = db.prepare("SELECT passwordHash, role FROM admin_users WHERE username = ?").get(username) as { passwordHash: string; role: string } | undefined;
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+
+      const matches = bcrypt.compareSync(currentPassword, user.passwordHash);
+      if (!matches) {
+        return res.status(400).json({ success: false, message: "Incorrect current password." });
+      }
+
+      const salt = bcrypt.genSaltSync(10);
+      const newHash = bcrypt.hashSync(newPassword, salt);
+
+      db.prepare("UPDATE admin_users SET passwordHash = ?, mustChangePassword = 0 WHERE username = ?").run(newHash, username);
+      
+      // Log the password change in history
+      logPasswordChange(username, user.role, newPassword);
+
+      res.json({ success: true, message: "Password updated successfully." });
+    } catch (err: any) {
+      console.error("[Password Change Error]", err.message);
+      res.status(500).json({ success: false, message: "Failed to update password." });
+    }
+  });
+
+  // 6.3 API: Admin Logout
+  app.post("/api/admin/logout", requireAdminAuth, (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      try {
+        db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
+      } catch (err: any) {
+        console.error("[Logout Error] Failed to delete session:", err.message);
+      }
+    }
+    res.json({ success: true, message: "Logged out successfully." });
+  });
+
+  // 6.4 API: Get Password History
+  app.get("/api/admin/password-history", requireAdminAuth, (req, res) => {
+    try {
+      let history;
+      if (req.admin?.role === "Superadmin") {
+        history = db.prepare("SELECT * FROM password_history ORDER BY changedAt DESC").all();
+      } else {
+        history = db.prepare("SELECT * FROM password_history WHERE username = ? ORDER BY changedAt DESC").all(req.admin?.username);
+      }
+      res.json({ success: true, history });
+    } catch (err: any) {
+      console.error("[History Fetch Error]", err.message);
+      res.status(500).json({ success: false, message: "Failed to fetch password history." });
+    }
+  });
+
+  // 6.5 API: Manage Admin Accounts
+  app.get("/api/admin/accounts", requireAdminAuth, requireSuperAdmin, (req, res) => {
+    try {
+      const accounts = db.prepare("SELECT username, role, mustChangePassword, createdAt FROM admin_users ORDER BY username ASC").all() as any[];
+      
+      let passwordsMap: Record<string, string> = {};
+      try {
+        const filePath = path.join(process.cwd(), "active-admin-credentials.local.txt");
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, "utf8");
+          const sections = content.split("------------------------------------------------------------");
+          for (const section of sections) {
+            const lines = section.split("\n");
+            let u = "";
+            let p = "";
+            for (const line of lines) {
+              if (line.trim().startsWith("Username: ")) u = line.replace("Username: ", "").trim().toLowerCase();
+              if (line.trim().startsWith("Password: ")) p = line.replace("Password: ", "").trim();
+            }
+            if (u && p) {
+              passwordsMap[u] = p;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn("Failed to parse passwords file during accounts fetch:", err.message);
+      }
+
+      const accountsWithPasswords = accounts.map(account => ({
+        ...account,
+        password: passwordsMap[account.username.toLowerCase()] || "Unavailable (Hashes Only)"
+      }));
+
+      res.json({ success: true, accounts: accountsWithPasswords });
+    } catch (err: any) {
+      console.error("[Accounts List Error]", err.message);
+      res.status(500).json({ success: false, message: "Failed to fetch accounts." });
+    }
+  });
+
+  app.post("/api/admin/accounts/create", requireAdminAuth, requireSuperAdmin, (req, res) => {
+    const { username, role } = req.body;
+    if (!username || !role) {
+      return res.status(400).json({ success: false, message: "Username and role are required." });
+    }
+    const lowerUsername = username.toLowerCase().trim();
+    if (!lowerUsername) {
+      return res.status(400).json({ success: false, message: "Invalid username." });
+    }
+    try {
+      const existing = db.prepare("SELECT username FROM admin_users WHERE username = ?").get(lowerUsername);
+      if (existing) {
+        return res.status(400).json({ success: false, message: "Account already exists." });
+      }
+
+      const tempPassword = generateTempPassword();
+      const salt = bcrypt.genSaltSync(10);
+      const hash = bcrypt.hashSync(tempPassword, salt);
+      const nowIso = new Date().toISOString();
+
+      db.prepare("INSERT INTO admin_users (username, passwordHash, role, mustChangePassword, createdAt) VALUES (?, ?, ?, 1, ?)")
+        .run(lowerUsername, hash, role, nowIso);
+
+      logPasswordChange(lowerUsername, role, tempPassword);
+
+      res.json({ success: true, tempPassword, username: lowerUsername });
+    } catch (err: any) {
+      console.error("[Account Create Error]", err.message);
+      res.status(500).json({ success: false, message: "Failed to create account: " + err.message });
+    }
+  });
+
+  app.post("/api/admin/accounts/reset-password", requireAdminAuth, requireSuperAdmin, (req, res) => {
+    const { username } = req.body;
+    if (!username) {
+      return res.status(400).json({ success: false, message: "Username is required." });
+    }
+    const lowerUsername = username.toLowerCase().trim();
+    try {
+      const user = db.prepare("SELECT role FROM admin_users WHERE username = ?").get(lowerUsername) as { role: string } | undefined;
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+
+      const tempPassword = generateTempPassword();
+      const salt = bcrypt.genSaltSync(10);
+      const hash = bcrypt.hashSync(tempPassword, salt);
+
+      db.transaction(() => {
+        db.prepare("UPDATE admin_users SET passwordHash = ?, mustChangePassword = 1 WHERE username = ?").run(hash, lowerUsername);
+        db.prepare("DELETE FROM admin_sessions WHERE username = ?").run(lowerUsername);
+      })();
+
+      logPasswordChange(lowerUsername, user.role, tempPassword);
+
+      res.json({ success: true, tempPassword, username: lowerUsername });
+    } catch (err: any) {
+      console.error("[Account Reset Error]", err.message);
+      res.status(500).json({ success: false, message: "Failed to reset password: " + err.message });
+    }
+  });
+
+  app.post("/api/admin/accounts/delete", requireAdminAuth, requireSuperAdmin, (req, res) => {
+    const { username } = req.body;
+    if (!username) {
+      return res.status(400).json({ success: false, message: "Username is required." });
+    }
+    const lowerUsername = username.toLowerCase().trim();
+    try {
+      const user = db.prepare("SELECT role FROM admin_users WHERE username = ?").get(lowerUsername) as { role: string } | undefined;
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+
+      if (user.role === "Superadmin") {
+        const superadminCount = (db.prepare("SELECT COUNT(*) as count FROM admin_users WHERE role = 'Superadmin'").get() as { count: number }).count;
+        if (superadminCount <= 1) {
+          return res.status(400).json({ success: false, message: "Cannot delete the last remaining Superadmin account." });
+        }
+      }
+
+      db.transaction(() => {
+        db.prepare("DELETE FROM admin_users WHERE username = ?").run(lowerUsername);
+        db.prepare("DELETE FROM admin_sessions WHERE username = ?").run(lowerUsername);
+      })();
+
+      res.json({ success: true, message: "Account deleted successfully." });
+    } catch (err: any) {
+      console.error("[Account Delete Error]", err.message);
+      res.status(500).json({ success: false, message: "Failed to delete account: " + err.message });
+    }
   });
 
   // 7. Serve Frontend Client Files using Vite middleware (development) or Static Server (production)

@@ -21,3 +21,7 @@ school.db
 !public/assets/*.jpg
 !public/assets/*.png
 !public/assets/*.jfif
+
+# Admin Password History Mirror File
+admin-credentials.local.txt
+active-admin-credentials.local.txt

@@ -35,10 +35,10 @@ export default function Footer({
             )}
           </div>
           <div className="flex flex-col text-left">
-            <span className="font-serif text-sm text-white font-bold leading-none">
+            <span className="font-serif text-xs sm:text-sm text-white font-bold leading-none">
               Ashish Memorial Public Senior Secondary School
             </span>
-            <span className="font-mono text-[9px] text-brass-gold uppercase tracking-wider mt-1.5">
+            <span className="font-mono text-[8px] sm:text-[9px] text-brass-gold uppercase tracking-wider mt-1.5">
               Hindaun City (Karauli) · Estd. 2005
             </span>
           </div>
@@ -73,10 +73,10 @@ export default function Footer({
 
         {/* Copyright Text */}
         <div className="text-center md:text-right">
-          <p className="font-mono text-[10px] text-white/50 tracking-wide">
+          <p className="font-mono text-[8px] sm:text-[10px] text-white/50 tracking-wide">
             © 2026 Ashish Memorial Public Senior Secondary School. All Rights Reserved.
           </p>
-          <p className="font-mono text-[9px] text-brass-gold/50 tracking-wider mt-0.5">
+          <p className="font-mono text-[8px] sm:text-[9px] text-brass-gold/50 tracking-wider mt-0.5">
             Approved by Rajasthan State Board of Secondary Education
           </p>
         </div>

@@ -485,7 +485,8 @@ export default function Gallery({
           >
             <button
               onClick={() => setSelectedGalleryImg(null)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors z-50 cursor-pointer"
+              className="fixed md:absolute top-4 right-4 text-white/80 hover:text-white bg-white/20 hover:bg-white/35 md:bg-white/10 md:hover:bg-white/20 w-11 h-11 md:w-auto md:h-auto md:p-2 rounded-full flex items-center justify-center transition-colors z-[210] md:z-50 cursor-pointer"
+              aria-label="Close modal"
             >
               <X className="w-6 h-6" />
             </button>
@@ -496,17 +497,17 @@ export default function Gallery({
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
-              className="relative max-w-4xl w-full bg-ink-navy border border-white/10 rounded-sm overflow-hidden shadow-2xl flex flex-col md:flex-row"
+              className="relative max-w-[95vw] md:max-w-4xl w-full max-h-[90vh] md:max-h-none overflow-y-auto md:overflow-hidden bg-ink-navy border border-white/10 rounded-sm overflow-hidden shadow-2xl flex flex-col md:flex-row"
               onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside content
             >
 
               {/* Image Column */}
-              <div className="relative flex-1 bg-black flex items-center justify-center aspect-[4/3] md:aspect-auto">
+              <div className="relative flex-1 bg-black flex items-center justify-center aspect-[4/3] md:aspect-auto max-h-[50vh] md:max-h-none">
                 <img
                   src={galleryImgErrors[selectedGalleryImg.id] ? selectedGalleryImg.fallbackSrc : selectedGalleryImg.localSrc}
                   alt={selectedGalleryImg.title}
                   loading="lazy"
-                  className="max-h-[70vh] md:max-h-[80vh] w-full object-contain"
+                  className="max-h-[50vh] md:max-h-[80vh] w-full object-contain"
                 />
 
                 {/* Left navigation arrow */}
