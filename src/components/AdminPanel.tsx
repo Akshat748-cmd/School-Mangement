@@ -29,7 +29,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [adminRole, setAdminRole] = useState(() => sessionStorage.getItem("admin_role") || "");
   const [adminUsername, setAdminUsername] = useState(() => sessionStorage.getItem("admin_username") || "");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => !!sessionStorage.getItem("admin_token"));
-  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [adminInquiries, setAdminInquiries] = useState<any[]>([]);
   const [adminSettings, setAdminSettings] = useState<any>({
     adminPassword: "ampsadmin",
@@ -45,20 +44,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     brevoSenderEmail: "",
     brevoSenderName: "AMPS Portal"
   });
-  const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "settings" | "changepassword" | "passwordhistory" | "accounts">("inquiries");
+  const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "settings">("inquiries");
   const [adminErrorMsg, setAdminErrorMsg] = useState("");
   const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
-
-  // ─── Password History & Account Management ──────────────────────────────────
-  const [passwordHistory, setPasswordHistory] = useState<any[]>([]);
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<number | string, boolean>>({});
-  const [adminAccounts, setAdminAccounts] = useState<any[]>([]);
-  const [newAccountUsername, setNewAccountUsername] = useState("");
-  const [newAccountRole, setNewAccountRole] = useState("Chairman");
-  const [returnedTempPassword, setReturnedTempPassword] = useState("");
-  const [returnedTempUsername, setReturnedTempUsername] = useState("");
-  const [accountsError, setAccountsError] = useState("");
-  const [accountsSuccess, setAccountsSuccess] = useState("");
 
   // ─── Analytics ──────────────────────────────────────────────────────────────
   const [isClosing, setIsClosing] = useState(false);
@@ -69,19 +57,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [inquiryStatusFilter, setInquiryStatusFilter] = useState<"all" | "pending" | "contacted" | "done">("all");
   const [inquirySort, setInquirySort] = useState<"newest" | "oldest" | "pending_first" | "done_last">("newest");
 
-  // ─── Password Change ─────────────────────────────────────────────────────────
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [changePasswordError, setChangePasswordError] = useState("");
-  const [changePasswordSuccess, setChangePasswordSuccess] = useState("");
-
   // ─── UI-Only States ───────────────────────────────────────────────────────────
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -129,7 +107,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
   // ─── Analytics Polling ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isAdminAuthenticated || !sessionToken || mustChangePassword) return;
+    if (!isAdminAuthenticated || !sessionToken) return;
     let prevUnread = unreadCount;
     const poll = async () => {
       try {
@@ -159,7 +137,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     };
     const interval = setInterval(poll, 30000);
     return () => clearInterval(interval);
-  }, [isAdminAuthenticated, sessionToken, mustChangePassword, unreadCount]);
+  }, [isAdminAuthenticated, sessionToken, unreadCount]);
 
   // ─── Fetch Wrapper ────────────────────────────────────────────────────────────
   const adminFetch = async (url: string, options: RequestInit = {}) => {
@@ -185,7 +163,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     setAdminUsername("");
     setAdminActiveTab("inquiries");
     setIsAdminAuthenticated(false);
-    setMustChangePassword(false);
     sessionStorage.removeItem("admin_token");
     sessionStorage.removeItem("admin_role");
     sessionStorage.removeItem("admin_username");
@@ -229,12 +206,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         setSessionToken(data.token);
         setAdminRole(data.role);
         setAdminUsername(data.username);
-        setMustChangePassword(data.mustChangePassword);
         setIsAdminAuthenticated(true);
         setAdminPasswordInput("");
-        if (!data.mustChangePassword) {
-          loadDashboardData(data.token);
-        }
+        loadDashboardData(data.token);
       } else {
         setAdminErrorMsg(data.message || "Invalid username or password.");
       }
@@ -242,34 +216,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       setAdminErrorMsg("Connection failed: " + err.message);
     } finally {
       setIsLoggingIn(false);
-    }
-  };
-
-  const fetchPasswordHistory = async (token = sessionToken) => {
-    if (!token) return;
-    try {
-      const res = await fetch("/api/admin/password-history", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok && data.success) setPasswordHistory(data.history || []);
-    } catch (err) {
-      console.error("Failed to fetch password history:", err);
-    }
-  };
-
-  const fetchAdminAccounts = async (token = sessionToken) => {
-    if (!token) return;
-    const userRole = sessionStorage.getItem("admin_role") || adminRole;
-    if (userRole !== "Superadmin") return;
-    try {
-      const res = await fetch("/api/admin/accounts", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok && data.success) setAdminAccounts(data.accounts || []);
-    } catch (err) {
-      console.error("Failed to fetch admin accounts:", err);
     }
   };
 
@@ -289,10 +235,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         });
         const settingsData = await settingsRes.json();
         if (settingsRes.ok && settingsData.success) setAdminSettings(settingsData.settings);
-        fetchAdminAccounts(token);
       }
-
-      fetchPasswordHistory(token);
 
       const analyticsRes = await fetch("/api/admin/analytics", {
         method: "POST",
@@ -309,8 +252,8 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   useEffect(() => {
-    if (sessionToken && !mustChangePassword) loadDashboardData(sessionToken);
-  }, [sessionToken, mustChangePassword]);
+    if (sessionToken) loadDashboardData(sessionToken);
+  }, [sessionToken]);
 
   const handleSaveSettings = async () => {
     try {
@@ -402,8 +345,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         setAnalyticsData(aData);
         setUnreadCount(aData.unreadCount);
       }
-      fetchPasswordHistory();
-      fetchAdminAccounts();
     } catch (err) {
       console.error(err);
     }
@@ -551,125 +492,10 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
   const filteredInquiries = getFilteredInquiries();
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setChangePasswordError("");
-    setChangePasswordSuccess("");
-    if (newPassword.length < 8) { setChangePasswordError("New password must be at least 8 characters long."); return; }
-    if (newPassword !== confirmNewPassword) { setChangePasswordError("New passwords do not match."); return; }
-    try {
-      const res = await adminFetch("/api/admin/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setChangePasswordSuccess("Password changed successfully.");
-        setCurrentPassword(""); setNewPassword(""); setConfirmNewPassword("");
-        fetchPasswordHistory();
-        if (mustChangePassword) { setMustChangePassword(false); loadDashboardData(sessionToken); }
-        showToast("Password updated successfully!", "success");
-      } else {
-        setChangePasswordError(data.message || "Failed to change password.");
-      }
-    } catch (err: any) {
-      setChangePasswordError(err.message || "An error occurred.");
-    }
-  };
-
-  const handleCreateAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAccountsError(""); setAccountsSuccess(""); setReturnedTempPassword(""); setReturnedTempUsername("");
-    if (!newAccountUsername.trim()) { setAccountsError("Username is required."); return; }
-    try {
-      const res = await adminFetch("/api/admin/accounts/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: newAccountUsername, role: newAccountRole })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAccountsSuccess(`Account created for ${data.username}!`);
-        setReturnedTempPassword(data.tempPassword);
-        setReturnedTempUsername(data.username);
-        setNewAccountUsername("");
-        fetchAdminAccounts(); fetchPasswordHistory();
-        showToast(`Account created for ${data.username}!`, "success");
-      } else {
-        setAccountsError(data.message || "Failed to create account.");
-      }
-    } catch (err: any) {
-      setAccountsError(err.message || "An error occurred.");
-    }
-  };
-
-  const handleResetPassword = async (username: string) => {
-    if (!window.confirm(`Are you sure you want to reset the password for: ${username}?`)) return;
-    setAccountsError(""); setAccountsSuccess(""); setReturnedTempPassword(""); setReturnedTempUsername("");
-    try {
-      const res = await adminFetch("/api/admin/accounts/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAccountsSuccess(`Password reset for ${data.username}!`);
-        setReturnedTempPassword(data.tempPassword);
-        setReturnedTempUsername(data.username);
-        fetchAdminAccounts(); fetchPasswordHistory();
-        showToast(`Password reset for ${data.username}!`, "success");
-      } else {
-        setAccountsError(data.message || "Failed to reset password.");
-      }
-    } catch (err: any) {
-      setAccountsError(err.message || "An error occurred.");
-    }
-  };
-
-  const handleDeleteAccount = async (username: string) => {
-    if (username === adminUsername) { alert("You cannot delete your own logged-in account!"); return; }
-    if (!window.confirm(`CRITICAL: Permanently delete account: ${username}? This also deletes their active sessions.`)) return;
-    setAccountsError(""); setAccountsSuccess(""); setReturnedTempPassword(""); setReturnedTempUsername("");
-    try {
-      const res = await adminFetch("/api/admin/accounts/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAccountsSuccess(`Account ${username} deleted.`);
-        fetchAdminAccounts();
-        showToast(`Account ${username} deleted.`, "success");
-      } else {
-        setAccountsError(data.message || "Failed to delete account.");
-      }
-    } catch (err: any) {
-      setAccountsError(err.message || "An error occurred.");
-    }
-  };
-
-  const togglePasswordReveal = (id: number | string) => {
-    setRevealedPasswords(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // ─── Role Card Config ─────────────────────────────────────────────────────────
-  const roleCards = [
-    { value: "superadmin", label: "Superadmin", icon: ShieldAlert, desc: "Full system access" },
-    { value: "chairman", label: "Chairman", icon: Crown, desc: "Board oversight" },
-    { value: "administrator", label: "Administrator", icon: Settings, desc: "Portal management" },
-    { value: "principal", label: "Principal", icon: User, desc: "Academic oversight" },
-  ];
-
   // ─── Sidebar Nav Config ───────────────────────────────────────────────────────
   const navItems = [
     { key: "inquiries", label: "Inquiries", icon: ClipboardList, badge: unreadCount > 0 ? unreadCount : null },
-    { key: "settings", label: "Delivery Engines", icon: Settings, superadminOnly: true },
-    { key: "changepassword", label: "Change Password", icon: Key },
-    { key: "passwordhistory", label: "Password History", icon: History },
-    ...(adminRole === "Superadmin" ? [{ key: "accounts", label: "Manage Accounts", icon: Users }] : []),
+    ...(adminRole === "Superadmin" ? [{ key: "settings", label: "Delivery Engines", icon: Settings }] : []),
   ];
 
   // ─── Password Field Helper ────────────────────────────────────────────────────
@@ -814,7 +640,12 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                   {/* Role Cards */}
                   <p style={{ fontFamily: "monospace", color: "#64748b", fontSize: 9, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Select Role</p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
-                    {roleCards.map(card => {
+                    {[
+                      { value: "superadmin", label: "Superadmin", icon: ShieldAlert, desc: "Full system access" },
+                      { value: "chairman", label: "Chairman", icon: Crown, desc: "Board oversight" },
+                      { value: "administrator", label: "Administrator", icon: Settings, desc: "Portal management" },
+                      { value: "principal", label: "Principal", icon: User, desc: "Academic oversight" },
+                    ].map(card => {
                       const Icon = card.icon;
                       const isSelected = adminUsernameInput === card.value;
                       return (
@@ -882,8 +713,11 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           style={{ overflow: "hidden" }}
                         >
                           <div style={{ marginTop: 8, background: "#fff8f0", border: "1px solid #e2d9cc", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
-                            <p style={{ margin: "0 0 4px", color: "#14213D", fontWeight: 600 }}>Password Recovery</p>
-                            <p style={{ margin: 0 }}>To reset your password, please contact the Superadmin. The Superadmin can reset any account password from the <strong>Accounts Management</strong> section.</p>
+                            <p style={{ margin: "0 0 4px", color: "#14213D", fontWeight: 600 }}>🔑 Active Console Passwords:</p>
+                            <p style={{ margin: 0 }}>• <strong>Superadmin:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampssuperadmin</code> (or <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code>)</p>
+                            <p style={{ margin: 0 }}>• <strong>Chairman:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampschairman</code> (or <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code>)</p>
+                            <p style={{ margin: 0 }}>• <strong>Administrator:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code></p>
+                            <p style={{ margin: 0 }}>• <strong>Principal:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsprincipal</code> (or <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code>)</p>
                             <button
                               type="button"
                               onClick={() => setShowForgotPassword(false)}
@@ -944,120 +778,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
             </div>
 
             /* ════════════════════════════════════════════════════════════════════ */
-            /* FORCE PASSWORD CHANGE SCREEN                                        */
-            /* ════════════════════════════════════════════════════════════════════ */
-          ) : mustChangePassword ? (
-            <div
-              className="flex-1 flex items-center justify-center p-4 overflow-y-auto"
-              style={{ background: "linear-gradient(135deg, #0a0f1e 0%, #0d1b3e 50%, #111827 100%)" }}
-            >
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="w-full max-w-md rounded-2xl overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.6)] border border-white/10"
-                style={{ background: "#111827" }}
-              >
-                <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #c9a84c, #f0d080, #c9a84c)" }} />
-                <div className="p-8">
-                  <div className="flex flex-col items-center text-center mb-6">
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-                      style={{ background: "linear-gradient(135deg, #c9a84c20, #c9a84c40)", border: "1px solid #c9a84c40" }}
-                    >
-                      <Key size={26} style={{ color: "#c9a84c" }} />
-                    </div>
-                    <h2 className="text-xl font-bold text-white mb-1">Password Change Required</h2>
-                    <p className="text-sm text-white/40">
-                      Set a permanent password to access your portal.
-                    </p>
-                  </div>
-
-                  <AnimatePresence>
-                    {changePasswordError && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                        className="mb-4 flex items-start gap-2 bg-rose-900/40 border border-rose-700/40 text-rose-300 px-3 py-2.5 rounded-lg text-xs font-medium"
-                      >
-                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                        {changePasswordError}
-                      </motion.div>
-                    )}
-                    {changePasswordSuccess && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                        className="mb-4 flex items-start gap-2 bg-emerald-900/40 border border-emerald-700/40 text-emerald-300 px-3 py-2.5 rounded-lg text-xs font-medium"
-                      >
-                        <CheckCircle size={14} className="shrink-0 mt-0.5" />
-                        {changePasswordSuccess}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <form onSubmit={handleChangePassword} className="space-y-4">
-                    <div>
-                      <label className="block text-[11px] font-bold font-mono text-white/40 uppercase tracking-widest mb-1.5">Current / Temporary Password</label>
-                      <div className="relative">
-                        <input
-                          type={showCurrentPassword ? "text" : "password"}
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          required
-                          className="w-full rounded-xl px-4 py-3 pr-11 text-sm font-mono text-white placeholder-white/20 focus:outline-none transition-all"
-                          style={{ background: "#1a2540", border: "1px solid rgba(255,255,255,0.12)" }}
-                        />
-                        <button type="button" onClick={() => setShowCurrentPassword(v => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 cursor-pointer" tabIndex={-1}>
-                          {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold font-mono text-white/40 uppercase tracking-widest mb-1.5">New Password (Min 8 chars)</label>
-                      <div className="relative">
-                        <input
-                          type={showNewPassword ? "text" : "password"}
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          required
-                          className="w-full rounded-xl px-4 py-3 pr-11 text-sm font-mono text-white placeholder-white/20 focus:outline-none transition-all"
-                          style={{ background: "#1a2540", border: "1px solid rgba(255,255,255,0.12)" }}
-                        />
-                        <button type="button" onClick={() => setShowNewPassword(v => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 cursor-pointer" tabIndex={-1}>
-                          {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold font-mono text-white/40 uppercase tracking-widest mb-1.5">Confirm New Password</label>
-                      <div className="relative">
-                        <input
-                          type={showConfirmPassword ? "text" : "password"}
-                          value={confirmNewPassword}
-                          onChange={(e) => setConfirmNewPassword(e.target.value)}
-                          required
-                          className="w-full rounded-xl px-4 py-3 pr-11 text-sm font-mono text-white placeholder-white/20 focus:outline-none transition-all"
-                          style={{ background: "#1a2540", border: "1px solid rgba(255,255,255,0.12)" }}
-                        />
-                        <button type="button" onClick={() => setShowConfirmPassword(v => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 cursor-pointer" tabIndex={-1}>
-                          {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm uppercase tracking-wider mt-2 cursor-pointer"
-                      style={{ background: "linear-gradient(135deg, #c9a84c, #f0d080)", color: "#0a0f1e", boxShadow: "0 4px 20px rgba(201,168,76,0.25)" }}
-                    >
-                      <Key size={16} /> Update Password &amp; Enter
-                    </button>
-                  </form>
-                </div>
-              </motion.div>
-            </div>
-
-            /* ════════════════════════════════════════════════════════════════════ */
             /* MAIN DASHBOARD                                                      */
             /* ════════════════════════════════════════════════════════════════════ */
           ) : (
@@ -1098,9 +818,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           setAdminActiveTab(item.key as any);
                           setAdminErrorMsg(""); setAdminSuccessMsg("");
                           if (item.key === "inquiries") refreshInquiries();
-                          else if (item.key === "passwordhistory") fetchPasswordHistory();
-                          else if (item.key === "accounts") fetchAdminAccounts();
-                          else if (item.key === "changepassword") { setChangePasswordError(""); setChangePasswordSuccess(""); }
                         }}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer relative ${isActive
                           ? "text-white"
@@ -1178,8 +895,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                         setAdminActiveTab(item.key as any);
                         setAdminErrorMsg(""); setAdminSuccessMsg("");
                         if (item.key === "inquiries") refreshInquiries();
-                        else if (item.key === "passwordhistory") fetchPasswordHistory();
-                        else if (item.key === "accounts") fetchAdminAccounts();
                       }}
                       className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-1 relative transition-colors cursor-pointer ${isActive ? "text-[#f0d080]" : "text-white/40"
                         }`}
@@ -1728,279 +1443,6 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           </div>
                         </div>
                       )
-                    )}
-
-                    {/* ══ CHANGE PASSWORD TAB ═══════════════════════════════════ */}
-                    {adminActiveTab === "changepassword" && (
-                      <div className="space-y-6 max-w-md">
-                        <div>
-                          <h2 className="text-xl font-bold text-slate-900">Change Security Key</h2>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Updating credentials for: <strong className="text-indigo-600 uppercase">{adminRole}</strong> ({adminUsername})
-                          </p>
-                        </div>
-
-                        <AnimatePresence>
-                          {changePasswordError && (
-                            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                              className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs font-medium">
-                              <AlertTriangle size={14} className="shrink-0 mt-0.5" /> {changePasswordError}
-                            </motion.div>
-                          )}
-                          {changePasswordSuccess && (
-                            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                              className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-xs font-medium">
-                              <CheckCircle size={14} className="shrink-0 mt-0.5" /> {changePasswordSuccess}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-
-                        <form onSubmit={handleChangePassword} className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-sm">
-                          <PwField label="Current Password" value={currentPassword} onChange={setCurrentPassword}
-                            show={showCurrentPassword} onToggle={() => setShowCurrentPassword(v => !v)} />
-                          <PwField label="New Password (min 8 chars)" value={newPassword} onChange={setNewPassword}
-                            show={showNewPassword} onToggle={() => setShowNewPassword(v => !v)} />
-                          <PwField label="Confirm New Password" value={confirmNewPassword} onChange={setConfirmNewPassword}
-                            show={showConfirmPassword} onToggle={() => setShowConfirmPassword(v => !v)} />
-                          <div className="pt-2 border-t border-slate-100 flex justify-end">
-                            <button type="submit"
-                              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-6 rounded-xl cursor-pointer transition-colors shadow-sm">
-                              <Key size={14} /> Update Password
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    )}
-
-                    {/* ══ PASSWORD HISTORY TAB ══════════════════════════════════ */}
-                    {adminActiveTab === "passwordhistory" && (
-                      <div className="space-y-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <div>
-                            <h2 className="text-xl font-bold text-slate-900">Credentials Activity Log</h2>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {adminRole === "Superadmin" ? "All accounts — full audit trail" : "Your account — personal audit trail only"}
-                            </p>
-                          </div>
-                          <button onClick={() => fetchPasswordHistory()}
-                            className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg cursor-pointer transition-colors shadow-sm">
-                            <RefreshCw size={12} /> Refresh
-                          </button>
-                        </div>
-
-                        {/* Summary Card */}
-                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                          {adminRole === "Superadmin" ? (
-                            <div>
-                              <p className="text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-3">
-                                Total Changes: {passwordHistory.length}
-                              </p>
-                              <div className="flex flex-wrap gap-3">
-                                {["Chairman", "Administrator", "Principal", "Superadmin"].map(role => (
-                                  <div key={role} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                                    <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">{role}</p>
-                                    <p className="text-lg font-black text-slate-800">
-                                      {passwordHistory.filter(h => h.role === role).length}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-xs font-bold font-mono text-slate-600 uppercase tracking-widest">
-                              Your password has been changed <span className="text-indigo-600 text-xl font-black">{passwordHistory.length}</span> time{passwordHistory.length !== 1 && "s"}
-                            </p>
-                          )}
-                        </div>
-
-                        {passwordHistory.length === 0 ? (
-                          <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl">
-                            <History size={32} className="mx-auto mb-3 text-slate-300" />
-                            <p className="text-sm font-bold text-slate-400">No password history found</p>
-                          </div>
-                        ) : (
-                          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left border-collapse">
-                                <thead>
-                                  <tr className="border-b border-slate-200 text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest bg-slate-50">
-                                    <th className="px-5 py-3">Date / Time</th>
-                                    <th className="px-5 py-3">Role</th>
-                                    <th className="px-5 py-3">Username</th>
-                                    <th className="px-5 py-3">Password Record</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {passwordHistory.map((item: any) => {
-                                    const isRevealed = !!revealedPasswords[item.id];
-                                    return (
-                                      <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/70 text-xs transition-colors">
-                                        <td className="px-5 py-3.5 font-mono text-slate-500 whitespace-nowrap">
-                                          {new Date(item.changedAt).toLocaleString("en-IN")}
-                                        </td>
-                                        <td className="px-5 py-3.5">
-                                          <span className="font-bold text-slate-700">{item.role}</span>
-                                        </td>
-                                        <td className="px-5 py-3.5 font-mono text-slate-600">{item.username}</td>
-                                        <td className="px-5 py-3.5 font-mono">
-                                          <div className="flex items-center gap-2">
-                                            <span className={isRevealed ? "text-slate-800" : "text-slate-400 tracking-widest"}>
-                                              {isRevealed ? item.newPassword : "••••••••"}
-                                            </span>
-                                            <button type="button" onClick={() => togglePasswordReveal(item.id)}
-                                              className="text-slate-300 hover:text-slate-600 transition-colors cursor-pointer p-0.5 rounded"
-                                              title={isRevealed ? "Hide" : "Reveal"}>
-                                              {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ══ MANAGE ACCOUNTS TAB ═══════════════════════════════════ */}
-                    {adminActiveTab === "accounts" && (
-                      <div className="space-y-6">
-                        <div>
-                          <h2 className="text-xl font-bold text-slate-900">Manage Accounts</h2>
-                          <p className="text-xs text-slate-500 mt-0.5">Create, reset passwords, or delete console access accounts.</p>
-                        </div>
-
-                        <AnimatePresence>
-                          {accountsSuccess && (
-                            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                              className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-xs font-medium">
-                              <CheckCircle size={14} className="shrink-0 mt-0.5" /> {accountsSuccess}
-                            </motion.div>
-                          )}
-                          {accountsError && (
-                            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                              className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs font-medium">
-                              <AlertTriangle size={14} className="shrink-0 mt-0.5" /> {accountsError}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-
-                        {returnedTempPassword && (
-                          <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl space-y-2">
-                            <p className="font-bold text-amber-800 text-sm flex items-center gap-2">
-                              <AlertTriangle size={15} /> Copy this temporary password now!
-                            </p>
-                            <p className="text-xs text-amber-700">
-                              Temp password for <strong className="font-mono text-indigo-700">{returnedTempUsername}</strong>:
-                            </p>
-                            <div className="bg-white border border-amber-200 rounded-xl p-3 flex justify-between items-center max-w-sm">
-                              <span className="font-mono text-sm font-bold text-slate-800">{returnedTempPassword}</span>
-                              <button onClick={() => { navigator.clipboard.writeText(returnedTempPassword); showToast("Copied to clipboard!", "success"); }}
-                                className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[10px] uppercase font-bold py-1.5 px-3 rounded-lg cursor-pointer transition-colors">
-                                Copy
-                              </button>
-                            </div>
-                            <p className="text-[10px] text-amber-600 font-medium">It will NOT be shown again. User must change it on next login.</p>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                          {/* Create Account Form */}
-                          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm h-fit">
-                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
-                              <UserPlus size={15} className="text-indigo-500" /> Create New Account
-                            </h3>
-                            <form onSubmit={handleCreateAccount} className="space-y-3">
-                              <div>
-                                <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
-                                <input type="text" placeholder="e.g. principal_new" value={newAccountUsername}
-                                  onChange={(e) => setNewAccountUsername(e.target.value)}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-indigo-400 transition-all" required />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">Role Privilege</label>
-                                <select value={newAccountRole} onChange={(e) => setNewAccountRole(e.target.value)}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-400 transition-all">
-                                  <option value="Chairman">Chairman</option>
-                                  <option value="Administrator">Administrator</option>
-                                  <option value="Principal">Principal</option>
-                                  <option value="Superadmin">Superadmin</option>
-                                </select>
-                              </div>
-                              <button type="submit"
-                                className="w-full flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-wider py-2.5 rounded-lg cursor-pointer transition-colors shadow-sm">
-                                <UserPlus size={12} /> Create Account
-                              </button>
-                            </form>
-                          </div>
-
-                          {/* Accounts Table */}
-                          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left border-collapse">
-                                <thead>
-                                  <tr className="border-b border-slate-200 text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest bg-slate-50">
-                                    <th className="px-4 py-3">Username</th>
-                                    <th className="px-4 py-3">Role</th>
-                                    <th className="px-4 py-3">Password</th>
-                                    <th className="px-4 py-3">Status</th>
-                                    <th className="px-4 py-3">Created</th>
-                                    <th className="px-4 py-3 text-right">Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {adminAccounts.map((account: any) => {
-                                    const isRevealed = !!revealedPasswords["acc_" + account.username];
-                                    return (
-                                      <tr key={account.username} className="border-b border-slate-100 hover:bg-slate-50/70 text-xs transition-colors">
-                                        <td className="px-4 py-3 font-mono font-bold text-slate-900">{account.username}</td>
-                                        <td className="px-4 py-3 font-semibold text-slate-600">{account.role}</td>
-                                        <td className="px-4 py-3 font-mono">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className={isRevealed ? "text-slate-800" : "text-slate-400 tracking-widest"}>
-                                              {isRevealed ? account.password : "••••••••"}
-                                            </span>
-                                            <button type="button"
-                                              onClick={() => setRevealedPasswords(prev => ({ ...prev, ["acc_" + account.username]: !prev["acc_" + account.username] }))}
-                                              className="text-slate-300 hover:text-slate-600 transition-colors cursor-pointer p-0.5 rounded"
-                                              title={isRevealed ? "Hide" : "Reveal"}>
-                                              {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                                            </button>
-                                          </div>
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
-                                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${account.mustChangePassword === 1 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
-                                            }`}>
-                                            {account.mustChangePassword === 1 ? "Temp Key" : "Configured"}
-                                          </span>
-                                        </td>
-                                        <td className="px-4 py-3 font-mono text-slate-400 whitespace-nowrap">
-                                          {account.createdAt ? new Date(account.createdAt).toLocaleDateString("en-IN") : "Legacy"}
-                                        </td>
-                                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                                          <button onClick={() => handleResetPassword(account.username)}
-                                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-mono text-[10px] font-bold cursor-pointer mr-3 transition-colors">
-                                            <RotateCcw size={10} /> Reset
-                                          </button>
-                                          <button onClick={() => handleDeleteAccount(account.username)}
-                                            disabled={account.username === adminUsername}
-                                            className={`inline-flex items-center gap-1 font-mono text-[10px] font-bold cursor-pointer transition-colors ${account.username === adminUsername ? "text-slate-300 cursor-not-allowed" : "text-rose-600 hover:text-rose-800"
-                                              }`}>
-                                            <Trash2 size={10} /> Delete
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                     )}
 
                   </motion.div>

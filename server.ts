@@ -5,7 +5,6 @@ import nodemailer from "nodemailer";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 declare global {
@@ -37,8 +36,13 @@ dotenv.config();
  * which reset on Render redeploys/restarts due to ephemeral filesystem storage.
  */
 
-// Initialize SQLite database
-const db = new Database(path.join(process.cwd(), "school.db"));
+// Initialize SQLite database (supports Render persistent disk via DB_PATH)
+const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "school.db");
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+const db = new Database(DB_PATH);
 
 // Create tables if they don't exist
 db.exec(`
@@ -75,14 +79,6 @@ db.exec(`
     timestamp INTEGER NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS admin_users (
-    username TEXT PRIMARY KEY,
-    passwordHash TEXT NOT NULL,
-    role TEXT NOT NULL,
-    mustChangePassword INTEGER DEFAULT 1,
-    createdAt TEXT
-  );
-
   CREATE TABLE IF NOT EXISTS admin_sessions (
     token TEXT PRIMARY KEY,
     username TEXT NOT NULL,
@@ -90,14 +86,6 @@ db.exec(`
     createdAt INTEGER,
     lastActivity INTEGER,
     expiresAt INTEGER
-  );
-
-  CREATE TABLE IF NOT EXISTS password_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT,
-    role TEXT,
-    newPassword TEXT,
-    changedAt TEXT
   );
 `);
 
@@ -156,172 +144,13 @@ try {
   console.error("[DB Migration Error] Backfilling context failed:", err.message);
 }
 
-function generateTempPassword(): string {
-  return crypto.randomBytes(6).toString("hex");
-}
-
-function updateActiveCredentialsFile(username: string, role: string, plaintextPassword: string) {
-  if (process.env.NODE_ENV === "production") return;
-  const filePath = path.join(process.cwd(), "active-admin-credentials.local.txt");
-  let credentialsMap: Record<string, { role: string; password: string; updatedAt: string }> = {};
-
-  try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8");
-      const sections = content.split("------------------------------------------------------------");
-      for (const section of sections) {
-        const lines = section.split("\n");
-        let u = "";
-        let r = "";
-        let p = "";
-        let t = "";
-        for (const line of lines) {
-          if (line.trim().startsWith("Username: ")) u = line.replace("Username: ", "").trim().toLowerCase();
-          if (line.trim().startsWith("Role: ")) r = line.replace("Role: ", "").trim();
-          if (line.trim().startsWith("Password: ")) p = line.replace("Password: ", "").trim();
-          if (line.trim().startsWith("Last Updated: ")) t = line.replace("Last Updated: ", "").trim();
-        }
-        if (u && p) {
-          credentialsMap[u] = { role: r, password: p, updatedAt: t };
-        }
-      }
-    }
-  } catch (err: any) {
-    console.warn("Failed to parse existing active credentials file, starting fresh:", err.message);
-  }
-
-  const nowIst = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " (IST)";
-  credentialsMap[username.toLowerCase().trim()] = {
-    role,
-    password: plaintextPassword,
-    updatedAt: nowIst
-  };
-
-  try {
-    let output = "============================================================\n";
-    output += "ACTIVE ADMIN & SUPERADMIN PORTAL CREDENTIALS\n";
-    output += `Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} (IST)\n`;
-    output += "============================================================\n\n";
-
-    const entries = Object.entries(credentialsMap);
-    for (let i = 0; i < entries.length; i++) {
-      const [u, data] = entries[i];
-      output += `Username: ${u}\n`;
-      output += `Role: ${data.role}\n`;
-      output += `Password: ${data.password}\n`;
-      output += `Last Updated: ${data.updatedAt}\n`;
-      if (i < entries.length - 1) {
-        output += "------------------------------------------------------------\n";
-      }
-    }
-
-    fs.writeFileSync(filePath, output, "utf8");
-  } catch (err: any) {
-    console.warn("Failed to write active credentials file:", err.message);
-  }
-}
-
-function logPasswordChange(username: string, role: string, newPassword: string) {
-  const dbTime = new Date().toISOString();
-  const fileTime = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " (IST)";
-  try {
-    db.prepare("INSERT INTO password_history (username, role, newPassword, changedAt) VALUES (?, ?, ?, ?)")
-      .run(username, role, newPassword, dbTime);
-
-    if (process.env.NODE_ENV !== "production") {
-      const logLine = `[${fileTime}] ${role} (${username}) password set to: ${newPassword}\n`;
-      fs.appendFileSync(path.join(process.cwd(), "admin-credentials.local.txt"), logLine, "utf8");
-
-      // Also update active credentials
-      updateActiveCredentialsFile(username, role, newPassword);
-    }
-  } catch (err: any) {
-    console.warn(`[Security Warning] Failed to write password change to local file mirror: ${err.message}`);
-  }
-}
-
-// One-time seed migration for admin accounts
-try {
-  const userCount = (db.prepare("SELECT COUNT(*) as count FROM admin_users").get() as { count: number }).count;
-  if (userCount === 0) {
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync("ampsadmin", salt);
-    const insertStmt = db.prepare(
-      "INSERT INTO admin_users (username, passwordHash, role, mustChangePassword, createdAt) VALUES (?, ?, ?, 1, ?)"
-    );
-    db.transaction(() => {
-      const nowIso = new Date().toISOString();
-      insertStmt.run("chairman", hash, "Chairman", nowIso);
-      insertStmt.run("administrator", hash, "Administrator", nowIso);
-      insertStmt.run("principal", hash, "Principal", nowIso);
-    })();
-    updateActiveCredentialsFile("chairman", "Chairman", "ampsadmin");
-    updateActiveCredentialsFile("administrator", "Administrator", "ampsadmin");
-    updateActiveCredentialsFile("principal", "Principal", "ampsadmin");
-    console.log("[Security] 3 admin accounts created with temporary password 'ampsadmin'. Each MUST change their password on first login. Usernames: chairman, administrator, principal");
-  }
-} catch (err: any) {
-  console.error("[DB Migration Error] Seeding admin accounts failed:", err.message);
-}
-
-// Seeding migration for superadmin account (independent)
-try {
-  const superadminExists = db.prepare("SELECT username FROM admin_users WHERE username = 'superadmin'").get();
-  if (!superadminExists) {
-    const tempPassword = generateTempPassword();
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(tempPassword, salt);
-    const nowIso = new Date().toISOString();
-
-    db.prepare("INSERT INTO admin_users (username, passwordHash, role, mustChangePassword, createdAt) VALUES ('superadmin', ?, 'Superadmin', 1, ?)")
-      .run(hash, nowIso);
-
-    logPasswordChange("superadmin", "Superadmin", tempPassword);
-
-    console.log("=".repeat(60));
-    console.log("[Security] Superadmin account created with TEMPORARY password:");
-    console.log(`  ${tempPassword}`);
-    console.log(" Username: superadmin");
-    console.log(" This password will NOT be shown again in the console.");
-    console.log("=".repeat(60));
-  }
-} catch (err: any) {
-  console.error("[DB Migration Error] Seeding superadmin failed:", err.message);
-}
-
-// Sync password_history with active-admin-credentials.local.txt for missing records
-try {
-  if (process.env.NODE_ENV !== "production") {
-    const filePath = path.join(process.cwd(), "active-admin-credentials.local.txt");
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8");
-      const sections = content.split("------------------------------------------------------------");
-      const nowIso = new Date().toISOString();
-      
-      for (const section of sections) {
-        const lines = section.split("\n");
-        let u = "";
-        let r = "";
-        let p = "";
-        for (const line of lines) {
-          if (line.trim().startsWith("Username: ")) u = line.replace("Username: ", "").trim().toLowerCase();
-          if (line.trim().startsWith("Role: ")) r = line.replace("Role: ", "").trim();
-          if (line.trim().startsWith("Password: ")) p = line.replace("Password: ", "").trim();
-        }
-        if (u && p && r) {
-          const exists = db.prepare("SELECT id FROM password_history WHERE username = ?").get(u);
-          if (!exists) {
-            db.prepare("INSERT INTO password_history (username, role, newPassword, changedAt) VALUES (?, ?, ?, ?)")
-              .run(u, r, p, nowIso);
-            console.log(`[DB Migration] Backfilled initial password history for ${u}.`);
-          }
-        }
-      }
-    }
-  }
-} catch (err: any) {
-  console.error("[DB Migration Error] Backfilling password history failed:", err.message);
-}
+// Stateless Admin Credentials resolved from Environment Variables
+const ADMIN_CREDENTIALS: Record<string, { password: string; role: string }> = {
+  superadmin: { password: process.env.SUPERADMIN_PASSWORD || "ampssuperadmin", role: "Superadmin" },
+  chairman: { password: process.env.CHAIRMAN_PASSWORD || "ampsadmin", role: "Chairman" },
+  administrator: { password: process.env.ADMIN_PASSWORD || "ampsadmin", role: "Administrator" },
+  principal: { password: process.env.PRINCIPAL_PASSWORD || "ampsadmin", role: "Principal" },
+};
 
 // Default Configuration Settings
 const DEFAULT_SETTINGS = {
@@ -1605,20 +1434,8 @@ async function startServer() {
     const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
 
     try {
-      const user = db.prepare("SELECT username, passwordHash, role, mustChangePassword FROM admin_users WHERE username = ?").get(username.toLowerCase()) as {
-        username: string;
-        passwordHash: string;
-        role: string;
-        mustChangePassword: number;
-      } | undefined;
-
-      if (!user) {
-        recordFailedLogin(ip);
-        return res.status(401).json({ success: false, message: genericError });
-      }
-
-      const matches = bcrypt.compareSync(password, user.passwordHash);
-      if (!matches) {
+      const cred = ADMIN_CREDENTIALS[String(username).toLowerCase().trim()];
+      if (!cred || cred.password !== password) {
         recordFailedLogin(ip);
         return res.status(401).json({ success: false, message: genericError });
       }
@@ -1633,14 +1450,14 @@ async function startServer() {
       const expiresAt = now + 20 * 60 * 1000;
 
       db.prepare("INSERT INTO admin_sessions (token, username, role, createdAt, lastActivity, expiresAt) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(token, user.username, user.role, now, now, expiresAt);
+        .run(token, username.toLowerCase().trim(), cred.role, now, now, expiresAt);
 
       res.json({
         success: true,
         token,
-        username: user.username,
-        role: user.role,
-        mustChangePassword: user.mustChangePassword === 1
+        username: username.toLowerCase().trim(),
+        role: cred.role,
+        mustChangePassword: false
       });
     } catch (err: any) {
       console.error("[Login Error] Login failed:", err.message);
@@ -1648,50 +1465,7 @@ async function startServer() {
     }
   });
 
-  // 6.2 API: Admin Change Password
-  app.post("/api/admin/change-password", requireAdminAuth, (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-    const username = req.admin?.username;
-
-    if (!username) {
-      return res.status(401).json({ success: false, message: "Unauthorized." });
-    }
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ success: false, message: "Current password and new password are required." });
-    }
-
-    if (newPassword.length < 8) {
-      return res.status(400).json({ success: false, message: "New password must be at least 8 characters long." });
-    }
-
-    try {
-      const user = db.prepare("SELECT passwordHash, role FROM admin_users WHERE username = ?").get(username) as { passwordHash: string; role: string } | undefined;
-      if (!user) {
-        return res.status(404).json({ success: false, message: "User not found." });
-      }
-
-      const matches = bcrypt.compareSync(currentPassword, user.passwordHash);
-      if (!matches) {
-        return res.status(400).json({ success: false, message: "Incorrect current password." });
-      }
-
-      const salt = bcrypt.genSaltSync(10);
-      const newHash = bcrypt.hashSync(newPassword, salt);
-
-      db.prepare("UPDATE admin_users SET passwordHash = ?, mustChangePassword = 0 WHERE username = ?").run(newHash, username);
-      
-      // Log the password change in history
-      logPasswordChange(username, user.role, newPassword);
-
-      res.json({ success: true, message: "Password updated successfully." });
-    } catch (err: any) {
-      console.error("[Password Change Error]", err.message);
-      res.status(500).json({ success: false, message: "Failed to update password." });
-    }
-  });
-
-  // 6.3 API: Admin Logout
+  // 6.2 API: Admin Logout
   app.post("/api/admin/logout", requireAdminAuth, (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -1703,155 +1477,6 @@ async function startServer() {
       }
     }
     res.json({ success: true, message: "Logged out successfully." });
-  });
-
-  // 6.4 API: Get Password History
-  app.get("/api/admin/password-history", requireAdminAuth, (req, res) => {
-    try {
-      let history;
-      if (req.admin?.role === "Superadmin") {
-        history = db.prepare("SELECT * FROM password_history ORDER BY changedAt DESC").all();
-      } else {
-        history = db.prepare("SELECT * FROM password_history WHERE username = ? ORDER BY changedAt DESC").all(req.admin?.username);
-      }
-      res.json({ success: true, history });
-    } catch (err: any) {
-      console.error("[History Fetch Error]", err.message);
-      res.status(500).json({ success: false, message: "Failed to fetch password history." });
-    }
-  });
-
-  // 6.5 API: Manage Admin Accounts
-  app.get("/api/admin/accounts", requireAdminAuth, requireSuperAdmin, (req, res) => {
-    try {
-      const accounts = db.prepare("SELECT username, role, mustChangePassword, createdAt FROM admin_users ORDER BY username ASC").all() as any[];
-      
-      let passwordsMap: Record<string, string> = {};
-      try {
-        const filePath = path.join(process.cwd(), "active-admin-credentials.local.txt");
-        if (fs.existsSync(filePath)) {
-          const content = fs.readFileSync(filePath, "utf8");
-          const sections = content.split("------------------------------------------------------------");
-          for (const section of sections) {
-            const lines = section.split("\n");
-            let u = "";
-            let p = "";
-            for (const line of lines) {
-              if (line.trim().startsWith("Username: ")) u = line.replace("Username: ", "").trim().toLowerCase();
-              if (line.trim().startsWith("Password: ")) p = line.replace("Password: ", "").trim();
-            }
-            if (u && p) {
-              passwordsMap[u] = p;
-            }
-          }
-        }
-      } catch (err: any) {
-        console.warn("Failed to parse passwords file during accounts fetch:", err.message);
-      }
-
-      const accountsWithPasswords = accounts.map(account => ({
-        ...account,
-        password: passwordsMap[account.username.toLowerCase()] || "Unavailable (Hashes Only)"
-      }));
-
-      res.json({ success: true, accounts: accountsWithPasswords });
-    } catch (err: any) {
-      console.error("[Accounts List Error]", err.message);
-      res.status(500).json({ success: false, message: "Failed to fetch accounts." });
-    }
-  });
-
-  app.post("/api/admin/accounts/create", requireAdminAuth, requireSuperAdmin, (req, res) => {
-    const { username, role } = req.body;
-    if (!username || !role) {
-      return res.status(400).json({ success: false, message: "Username and role are required." });
-    }
-    const lowerUsername = username.toLowerCase().trim();
-    if (!lowerUsername) {
-      return res.status(400).json({ success: false, message: "Invalid username." });
-    }
-    try {
-      const existing = db.prepare("SELECT username FROM admin_users WHERE username = ?").get(lowerUsername);
-      if (existing) {
-        return res.status(400).json({ success: false, message: "Account already exists." });
-      }
-
-      const tempPassword = generateTempPassword();
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(tempPassword, salt);
-      const nowIso = new Date().toISOString();
-
-      db.prepare("INSERT INTO admin_users (username, passwordHash, role, mustChangePassword, createdAt) VALUES (?, ?, ?, 1, ?)")
-        .run(lowerUsername, hash, role, nowIso);
-
-      logPasswordChange(lowerUsername, role, tempPassword);
-
-      res.json({ success: true, tempPassword, username: lowerUsername });
-    } catch (err: any) {
-      console.error("[Account Create Error]", err.message);
-      res.status(500).json({ success: false, message: "Failed to create account: " + err.message });
-    }
-  });
-
-  app.post("/api/admin/accounts/reset-password", requireAdminAuth, requireSuperAdmin, (req, res) => {
-    const { username } = req.body;
-    if (!username) {
-      return res.status(400).json({ success: false, message: "Username is required." });
-    }
-    const lowerUsername = username.toLowerCase().trim();
-    try {
-      const user = db.prepare("SELECT role FROM admin_users WHERE username = ?").get(lowerUsername) as { role: string } | undefined;
-      if (!user) {
-        return res.status(404).json({ success: false, message: "User not found." });
-      }
-
-      const tempPassword = generateTempPassword();
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(tempPassword, salt);
-
-      db.transaction(() => {
-        db.prepare("UPDATE admin_users SET passwordHash = ?, mustChangePassword = 1 WHERE username = ?").run(hash, lowerUsername);
-        db.prepare("DELETE FROM admin_sessions WHERE username = ?").run(lowerUsername);
-      })();
-
-      logPasswordChange(lowerUsername, user.role, tempPassword);
-
-      res.json({ success: true, tempPassword, username: lowerUsername });
-    } catch (err: any) {
-      console.error("[Account Reset Error]", err.message);
-      res.status(500).json({ success: false, message: "Failed to reset password: " + err.message });
-    }
-  });
-
-  app.post("/api/admin/accounts/delete", requireAdminAuth, requireSuperAdmin, (req, res) => {
-    const { username } = req.body;
-    if (!username) {
-      return res.status(400).json({ success: false, message: "Username is required." });
-    }
-    const lowerUsername = username.toLowerCase().trim();
-    try {
-      const user = db.prepare("SELECT role FROM admin_users WHERE username = ?").get(lowerUsername) as { role: string } | undefined;
-      if (!user) {
-        return res.status(404).json({ success: false, message: "User not found." });
-      }
-
-      if (user.role === "Superadmin") {
-        const superadminCount = (db.prepare("SELECT COUNT(*) as count FROM admin_users WHERE role = 'Superadmin'").get() as { count: number }).count;
-        if (superadminCount <= 1) {
-          return res.status(400).json({ success: false, message: "Cannot delete the last remaining Superadmin account." });
-        }
-      }
-
-      db.transaction(() => {
-        db.prepare("DELETE FROM admin_users WHERE username = ?").run(lowerUsername);
-        db.prepare("DELETE FROM admin_sessions WHERE username = ?").run(lowerUsername);
-      })();
-
-      res.json({ success: true, message: "Account deleted successfully." });
-    } catch (err: any) {
-      console.error("[Account Delete Error]", err.message);
-      res.status(500).json({ success: false, message: "Failed to delete account: " + err.message });
-    }
   });
 
   // 7. Serve Frontend Client Files using Vite middleware (development) or Static Server (production)
