@@ -45,12 +45,8 @@ export default function Footer({
         </div>
 
         {/* Quick links to sections */}
-        <div className="hidden sm:flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono text-white/70 justify-center">
-          <a href="#navbar" className="hover:text-brass-gold transition-colors">TOP</a>
-          <span>·</span>
+        <div className="hidden sm:flex flex-nowrap gap-x-3 sm:gap-x-4 text-xs font-mono text-white/70 justify-center whitespace-nowrap">
           <a href="#notices" className="hover:text-brass-gold transition-colors">NOTICES</a>
-          <span>·</span>
-          <a href="#why-amps" className="hover:text-brass-gold transition-colors">ACADEMICS</a>
           <span>·</span>
           <a href="#about" className="hover:text-brass-gold transition-colors">ABOUT</a>
           <span>·</span>

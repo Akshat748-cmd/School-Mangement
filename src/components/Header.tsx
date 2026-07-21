@@ -112,7 +112,7 @@ export default function Header({
                 Ashish Memorial Public Senior Secondary School
               </span>
               <span className="font-mono text-brass-gold text-[9px] md:text-xs tracking-wider uppercase font-medium mt-0.5">
-                Hindaun City (Karauli) · Estd. 2005
+                Hindaun City (Karauli)
               </span>
             </div>
           </a>
@@ -133,13 +133,7 @@ export default function Header({
             >
               About
             </motion.a>
-            <motion.a 
-              whileTap={{ scale: 0.95 }}
-              href="#why-amps" 
-              className="text-white/85 hover:text-brass-gold transition-colors uppercase"
-            >
-              Academics
-            </motion.a>
+
             <motion.button 
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsMediaModalOpen(true)} 
@@ -203,13 +197,7 @@ export default function Header({
               >
                 About
               </a>
-              <a 
-                href="#why-amps" 
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-white/90 hover:text-brass-gold py-2 transition-colors border-b border-white/5"
-              >
-                Academics
-              </a>
+
               <button 
                 onClick={() => {
                   setMobileMenuOpen(false);
