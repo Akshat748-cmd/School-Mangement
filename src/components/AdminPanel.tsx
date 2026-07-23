@@ -5,8 +5,8 @@ import {
   History, Settings, ClipboardList, RefreshCw, Download,
   Trash2, ChevronDown, ChevronUp, Phone, Mail, MessageSquare,
   Loader2, CheckCircle, XCircle, AlertTriangle, Bell,
-  BarChart3, UserPlus, RotateCcw, X, ShieldAlert, TestTube,
-  HelpCircle, Crown, User
+  UserPlus, RotateCcw, X, ShieldAlert, TestTube,
+  HelpCircle, Crown, User, Activity, UserCheck, CornerUpLeft, Edit3, FileText, BarChart3
 } from "lucide-react";
 
 interface AdminPanelProps {
@@ -28,7 +28,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [sessionToken, setSessionToken] = useState(() => sessionStorage.getItem("admin_token") || "");
   const [adminRole, setAdminRole] = useState(() => sessionStorage.getItem("admin_role") || "");
   const [adminUsername, setAdminUsername] = useState(() => sessionStorage.getItem("admin_username") || "");
+  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(() => sessionStorage.getItem("admin_impersonated_by") || null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => !!sessionStorage.getItem("admin_token"));
+  
   const [adminInquiries, setAdminInquiries] = useState<any[]>([]);
   const [adminSettings, setAdminSettings] = useState<any>({
     adminPassword: "ampsadmin",
@@ -44,22 +46,46 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     brevoSenderEmail: "",
     brevoSenderName: "AMPS Portal"
   });
-  const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "settings">("inquiries");
+  
+  const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "audit_log" | "users" | "settings" | "my_profile">("inquiries");
   const [adminErrorMsg, setAdminErrorMsg] = useState("");
-  const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
 
-  // ─── Analytics ──────────────────────────────────────────────────────────────
+  // ─── Account & Audit States ──────────────────────────────────────────────────
+  const [passwordHistory, setPasswordHistory] = useState<any[]>([]);
+  const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
+  const [auditLogList, setAuditLogList] = useState<any[]>([]);
+  
+  // Password Change Form States (My Profile)
+  const [changePwCurrent, setChangePwCurrent] = useState("");
+  const [changePwNew, setChangePwNew] = useState("");
+  const [changePwConfirm, setChangePwConfirm] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Superadmin Reset & Impersonate States
+  const [userResetPasswords, setUserResetPasswords] = useState<Record<string, string>>({});
+  const [showResetRow, setShowResetRow] = useState<Record<string, boolean>>({});
+  const [isResettingPw, setIsResettingPw] = useState<Record<string, boolean>>({});
+  const [isImpersonating, setIsImpersonating] = useState<Record<string, boolean>>({});
+
+  // Audit Log Edit Modal States
+  const [editingAuditLogId, setEditingAuditLogId] = useState<number | null>(null);
+  const [editingAuditLogData, setEditingAuditLogData] = useState("");
+  const [isSavingAuditEdit, setIsSavingAuditEdit] = useState(false);
+
+  // ─── Inquiry & Filter States ────────────────────────────────────────────────
   const [isClosing, setIsClosing] = useState(false);
-  const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [expandedInquiries, setExpandedInquiries] = useState<Record<string, boolean>>({});
   const [inquiryFilter, setInquiryFilter] = useState<"all" | "unread" | "last7" | "last30">("all");
   const [inquiryStatusFilter, setInquiryStatusFilter] = useState<"all" | "pending" | "contacted" | "done">("all");
   const [inquirySort, setInquirySort] = useState<"newest" | "oldest" | "pending_first" | "done_last">("newest");
 
-  // ─── UI-Only States ───────────────────────────────────────────────────────────
+  // ─── UI Modal States ────────────────────────────────────────────────────────
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -84,113 +110,129 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         handleLogout("Logged out due to inactivity — please log in again.");
       }, 20 * 60 * 1000);
     };
-    window.addEventListener("mousemove", resetTimer);
-    window.addEventListener("keydown", resetTimer);
-    window.addEventListener("click", resetTimer);
-    window.addEventListener("scroll", resetTimer);
+
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+    events.forEach(event => window.addEventListener(event, resetTimer));
     resetTimer();
+
     return () => {
       clearTimeout(timer);
-      window.removeEventListener("mousemove", resetTimer);
-      window.removeEventListener("keydown", resetTimer);
-      window.removeEventListener("click", resetTimer);
-      window.removeEventListener("scroll", resetTimer);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
     };
   }, [isAdminAuthenticated, sessionToken]);
 
-  // ─── Notification Permission ──────────────────────────────────────────────────
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  // ─── Analytics Polling ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isAdminAuthenticated || !sessionToken) return;
-    let prevUnread = unreadCount;
-    const poll = async () => {
-      try {
-        const response = await adminFetch("/api/admin/analytics", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
-        const data = await response.json();
-        if (response.ok && data.success) {
-          const newUnread = data.unreadCount;
-          setAnalyticsData(data);
-          setUnreadCount(newUnread);
-          if (newUnread > prevUnread) {
-            if ("Notification" in window && Notification.permission === "granted") {
-              new Notification("New Inquiry Received", {
-                body: `You have ${newUnread - prevUnread} new unread inquiries.`,
-                icon: "/assets/logo.jpeg"
-              });
-            }
-            refreshInquiriesSilent();
-          }
-          prevUnread = newUnread;
-        }
-      } catch (err) {
-        console.error("Polling analytics error:", err);
-      }
+  // ─── Authenticated Fetch Helper ──────────────────────────────────────────────
+  const adminFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    const headers = {
+      ...options.headers,
+      "Authorization": `Bearer ${sessionToken}`
     };
-    const interval = setInterval(poll, 30000);
-    return () => clearInterval(interval);
-  }, [isAdminAuthenticated, sessionToken, unreadCount]);
-
-  // ─── Fetch Wrapper ────────────────────────────────────────────────────────────
-  const adminFetch = async (url: string, options: RequestInit = {}) => {
-    const headers = { ...options.headers, "Authorization": `Bearer ${sessionToken}` };
-    const res = await fetch(url, { ...options, headers });
-    if (res.status === 401) {
-      handleLogout("Logged out due to inactivity — please log in again.");
-      throw new Error("Session expired.");
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+      sessionStorage.removeItem("admin_token");
+      sessionStorage.removeItem("admin_role");
+      sessionStorage.removeItem("admin_username");
+      sessionStorage.removeItem("admin_impersonated_by");
+      setIsAdminAuthenticated(false);
+      setSessionToken("");
+      setImpersonatedBy(null);
+      showToast("Session expired. Please log in again.", "warning");
+      throw new Error("Unauthorized");
     }
-    return res;
-  };
+    return response;
+  }, [sessionToken, showToast]);
 
-  // ─── Handlers ─────────────────────────────────────────────────────────────────
-  const handleLogout = async (message = "") => {
-    if (sessionToken) {
-      fetch("/api/admin/logout", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${sessionToken}` }
-      }).catch(() => { });
-    }
-    setSessionToken("");
-    setAdminRole("");
-    setAdminUsername("");
-    setAdminActiveTab("inquiries");
-    setIsAdminAuthenticated(false);
-    sessionStorage.removeItem("admin_token");
-    sessionStorage.removeItem("admin_role");
-    sessionStorage.removeItem("admin_username");
-    setAdminErrorMsg("");
-    setAdminSuccessMsg("");
-    if (message) {
-      showToast(message, "warning");
-    } else {
-      showToast("Logged out successfully.", "success");
-    }
-  };
-
-  const refreshInquiriesSilent = async () => {
+  // ─── Data Loaders ────────────────────────────────────────────────────────────
+  const loadDashboardData = useCallback(async (token = sessionToken) => {
+    if (!token) return;
     try {
-      const response = await adminFetch("/api/admin/inquiries", {
+      // 1. Fetch Inquiries
+      const inqRes = await fetch("/api/admin/inquiries", {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Authorization": `Bearer ${token}` }
       });
-      const data = await response.json();
-      if (response.ok && data.success) setAdminInquiries(data.inquiries);
+      const inqData = await inqRes.json();
+      if (inqRes.ok && inqData.success) {
+        setAdminInquiries(inqData.inquiries || []);
+        setUnreadCount(inqData.unreadCount || 0);
+      }
+
+      // 2. Fetch Audit Log
+      loadAuditLogSilent(token);
+
+      // 3. Fetch Password History
+      loadPasswordHistorySilent(token);
+
+      // 4. Fetch Users (if Superadmin)
+      const role = sessionStorage.getItem("admin_role");
+      if (role === "Superadmin") {
+        loadAdminUsersSilent(token);
+        loadSettingsSilent(token);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Error loading dashboard data:", err);
+    }
+  }, [sessionToken]);
+
+  const loadAuditLogSilent = async (token = sessionToken) => {
+    try {
+      const res = await fetch("/api/admin/audit-log", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setAuditLogList(data.auditLog || []);
+    } catch (err) {
+      console.error("Error fetching audit log:", err);
     }
   };
 
+  const loadPasswordHistorySilent = async (token = sessionToken) => {
+    try {
+      const res = await fetch("/api/admin/password-history", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setPasswordHistory(data.history || []);
+    } catch (err) {
+      console.error("Error fetching password history:", err);
+    }
+  };
+
+  const loadAdminUsersSilent = async (token = sessionToken) => {
+    try {
+      const res = await fetch("/api/admin/users", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setAdminUsersList(data.users || []);
+    } catch (err) {
+      console.error("Error fetching admin users:", err);
+    }
+  };
+
+  const loadSettingsSilent = async (token = sessionToken) => {
+    try {
+      const res = await fetch("/api/admin/settings", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.settings) {
+        setAdminSettings(data.settings);
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdminAuthenticated && sessionToken) {
+      loadDashboardData(sessionToken);
+    }
+  }, [isAdminAuthenticated, sessionToken, loadDashboardData]);
+
+  // ─── Auth Handlers ───────────────────────────────────────────────────────────
   const handleAdminLogin = async () => {
     setAdminErrorMsg("");
-    setAdminSuccessMsg("");
     setIsLoggingIn(true);
     try {
       const response = await fetch("/api/admin/login", {
@@ -203,178 +245,252 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         sessionStorage.setItem("admin_token", data.token);
         sessionStorage.setItem("admin_role", data.role);
         sessionStorage.setItem("admin_username", data.username);
+        sessionStorage.removeItem("admin_impersonated_by");
+        
         setSessionToken(data.token);
         setAdminRole(data.role);
         setAdminUsername(data.username);
+        setImpersonatedBy(null);
         setIsAdminAuthenticated(true);
         setAdminPasswordInput("");
-        loadDashboardData(data.token);
+        showToast(`Welcome back, ${data.username}!`, "success");
       } else {
         setAdminErrorMsg(data.message || "Invalid username or password.");
       }
-    } catch (err: any) {
-      setAdminErrorMsg("Connection failed: " + err.message);
+    } catch (err) {
+      setAdminErrorMsg("Unable to connect to the administration server.");
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  const loadDashboardData = async (token: string) => {
+  const handleLogout = async (toastMsg?: string) => {
     try {
-      const inquiriesRes = await fetch("/api/admin/inquiries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
-      });
-      const inquiriesData = await inquiriesRes.json();
-      if (inquiriesRes.ok && inquiriesData.success) setAdminInquiries(inquiriesData.inquiries);
-
-      const userRole = sessionStorage.getItem("admin_role") || adminRole;
-      if (userRole === "Superadmin") {
-        const settingsRes = await fetch("/api/admin/settings", {
-          headers: { "Authorization": `Bearer ${token}` }
+      if (sessionToken) {
+        await fetch("/api/admin/logout", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${sessionToken}` }
         });
-        const settingsData = await settingsRes.json();
-        if (settingsRes.ok && settingsData.success) setAdminSettings(settingsData.settings);
-      }
-
-      const analyticsRes = await fetch("/api/admin/analytics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
-      });
-      const aData = await analyticsRes.json();
-      if (analyticsRes.ok && aData.success) {
-        setAnalyticsData(aData);
-        setUnreadCount(aData.unreadCount);
       }
     } catch (err) {
-      console.error("Error loading dashboard data:", err);
+      console.error(err);
+    } finally {
+      sessionStorage.removeItem("admin_token");
+      sessionStorage.removeItem("admin_role");
+      sessionStorage.removeItem("admin_username");
+      sessionStorage.removeItem("admin_impersonated_by");
+      setIsAdminAuthenticated(false);
+      setSessionToken("");
+      setAdminRole("");
+      setAdminUsername("");
+      setImpersonatedBy(null);
+      setAdminActiveTab("inquiries");
+      showToast(toastMsg || "Logged out of admin console.", "warning");
     }
   };
 
-  useEffect(() => {
-    if (sessionToken) loadDashboardData(sessionToken);
-  }, [sessionToken]);
+  // ─── Password Change Handler (My Profile) ────────────────────────────────────
+  const handlePasswordChange = async () => {
+    if (!changePwCurrent) {
+      showToast("Please enter your current password.", "warning");
+      return;
+    }
+    if (!changePwNew || changePwNew.length < 4) {
+      showToast("New password must be at least 4 characters long.", "warning");
+      return;
+    }
+    if (changePwNew !== changePwConfirm) {
+      showToast("New password and confirm password do not match.", "error");
+      return;
+    }
 
-  const handleSaveSettings = async () => {
+    setIsChangingPassword(true);
     try {
-      const response = await adminFetch("/api/admin/settings", {
+      const res = await adminFetch("/api/admin/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: adminSettings })
+        body: JSON.stringify({ currentPassword: changePwCurrent, newPassword: changePwNew })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        showToast("Settings saved successfully! Server-side dispatch updated.", "success");
-        setAdminSettings(data.settings);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Password updated successfully!", "success");
+        setChangePwCurrent("");
+        setChangePwNew("");
+        setChangePwConfirm("");
+        loadPasswordHistorySilent();
+        loadAuditLogSilent();
       } else {
-        showToast(data.message || "Failed to save settings.", "error");
+        showToast(data.message || "Failed to update password.", "error");
       }
     } catch (err: any) {
-      showToast("Error saving settings: " + err.message, "error");
+      showToast(err.message || "Error updating password.", "error");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
-  const handleTestEmail = async () => {
-    showToast("Testing email delivery...", "warning");
-    try {
-      const response = await adminFetch("/api/admin/test-email");
-      const data = await response.json();
-      if (response.ok && data.success) {
-        showToast(`✅ Test email sent via ${data.provider}! To: ${data.recipient || adminSettings.inquiryRecipient}`, "success");
-      } else {
-        const errorDetail = data.rawError || data.error || data.message || JSON.stringify(data);
-        showToast(`❌ Failed (${data.provider || "Provider"} ${data.statusCode || response.status}): ${errorDetail}`, "error");
-      }
-    } catch (err: any) {
-      showToast("Error invoking test email endpoint: " + err.message, "error");
+  // ─── Reset Password Handler (Superadmin Only) ────────────────────────────────
+  const handleResetUserPassword = async (targetUsername: string) => {
+    const newPass = userResetPasswords[targetUsername];
+    if (!newPass || newPass.length < 4) {
+      showToast("Password must be at least 4 characters long.", "warning");
+      return;
     }
-  };
 
-  const handleDeleteInquiry = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this inquiry?")) return;
+    setIsResettingPw(prev => ({ ...prev, [targetUsername]: true }));
     try {
-      const response = await adminFetch("/api/admin/clear-inquiries", {
+      const res = await adminFetch("/api/admin/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ targetUsername, newPassword: newPass })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setAdminInquiries(data.inquiries);
-        showToast("Inquiry deleted from database logs.", "success");
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Password reset successfully for ${targetUsername}!`, "success");
+        setUserResetPasswords(prev => ({ ...prev, [targetUsername]: "" }));
+        setShowResetRow(prev => ({ ...prev, [targetUsername]: false }));
+        loadAuditLogSilent();
+      } else {
+        showToast(data.message || "Failed to reset password.", "error");
       }
     } catch (err: any) {
-      showToast("Error deleting inquiry: " + err.message, "error");
+      showToast(err.message || "Error resetting password.", "error");
+    } finally {
+      setIsResettingPw(prev => ({ ...prev, [targetUsername]: false }));
+    }
+  };
+
+  // ─── Impersonation Handlers ─────────────────────────────────────────────────
+  const handleImpersonate = async (targetUsername: string) => {
+    setIsImpersonating(prev => ({ ...prev, [targetUsername]: true }));
+    try {
+      const res = await adminFetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUsername })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        sessionStorage.setItem("admin_token", data.token);
+        sessionStorage.setItem("admin_role", data.role);
+        sessionStorage.setItem("admin_username", data.username);
+        sessionStorage.setItem("admin_impersonated_by", data.impersonatedBy);
+
+        setSessionToken(data.token);
+        setAdminRole(data.role);
+        setAdminUsername(data.username);
+        setImpersonatedBy(data.impersonatedBy);
+        
+        showToast(`Now impersonating ${data.username} (${data.role})`, "warning");
+        loadDashboardData(data.token);
+      } else {
+        showToast(data.message || "Failed to start impersonation session.", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Error starting impersonation.", "error");
+    } finally {
+      setIsImpersonating(prev => ({ ...prev, [targetUsername]: false }));
+    }
+  };
+
+  const handleExitImpersonation = async () => {
+    try {
+      const res = await adminFetch("/api/admin/exit-impersonation", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        sessionStorage.setItem("admin_token", data.token);
+        sessionStorage.setItem("admin_role", data.role);
+        sessionStorage.setItem("admin_username", data.username);
+        sessionStorage.removeItem("admin_impersonated_by");
+
+        setSessionToken(data.token);
+        setAdminRole(data.role);
+        setAdminUsername(data.username);
+        setImpersonatedBy(null);
+
+        showToast("Exited impersonation session.", "success");
+        loadDashboardData(data.token);
+      }
+    } catch (err: any) {
+      showToast(err.message || "Error exiting impersonation.", "error");
+    }
+  };
+
+  // ─── Audit Log Handlers (Superadmin Only) ───────────────────────────────────
+  const handleRevokeAuditLog = async (id: number) => {
+    try {
+      const res = await adminFetch(`/api/admin/audit-log/${id}/revoke`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Inquiry restored successfully!", "success");
+        loadDashboardData();
+      } else {
+        showToast(data.message || "Failed to revoke action.", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Error revoking action.", "error");
+    }
+  };
+
+  const handleSaveAuditEdit = async () => {
+    if (!editingAuditLogId) return;
+    setIsSavingAuditEdit(true);
+    try {
+      const res = await adminFetch(`/api/admin/audit-log/${editingAuditLogId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_data: editingAuditLogData })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Audit log payload updated.", "success");
+        setEditingAuditLogId(null);
+        setEditingAuditLogData("");
+        loadAuditLogSilent();
+      } else {
+        showToast(data.message || "Failed to update audit log entry.", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Error updating audit log entry.", "error");
+    } finally {
+      setIsSavingAuditEdit(false);
+    }
+  };
+
+  // ─── Inquiry Handlers ───────────────────────────────────────────────────────
+  const handleDeleteInquiry = async (inquiryId: string) => {
+    try {
+      const response = await adminFetch(`/api/admin/inquiry/${inquiryId}`, { method: "DELETE" });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        showToast("Inquiry moved to trash.", "warning");
+        loadDashboardData();
+      } else {
+        showToast(data.message || "Failed to delete inquiry.", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Error deleting inquiry.", "error");
     }
   };
 
   const handleClearAllInquiries = async () => {
-    if (!window.confirm("CRITICAL: Are you sure you want to permanently delete ALL inquiry logs? This cannot be undone!")) return;
+    if (!window.confirm("ARE YOU SURE? This will move ALL inquiries to trash.")) return;
     try {
-      const response = await adminFetch("/api/admin/clear-inquiries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
+      const response = await adminFetch("/api/admin/clear-inquiries", { method: "POST" });
       const data = await response.json();
       if (response.ok && data.success) {
-        setAdminInquiries([]);
-        showToast("All inquiry logs have been cleared.", "success");
+        showToast("All inquiries cleared.", "warning");
+        loadDashboardData();
+      } else {
+        showToast(data.message || "Failed to clear inquiries.", "error");
       }
     } catch (err: any) {
-      showToast("Error wiping database logs: " + err.message, "error");
+      showToast("Error clearing inquiries: " + err.message, "error");
     }
   };
 
-  const refreshInquiries = async () => {
-    try {
-      const response = await adminFetch("/api/admin/inquiries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setAdminInquiries(data.inquiries);
-        showToast("Data reloaded from database.", "success");
-      }
-      const analyticsRes = await adminFetch("/api/admin/analytics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
-      const aData = await analyticsRes.json();
-      if (aData.success) {
-        setAnalyticsData(aData);
-        setUnreadCount(aData.unreadCount);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleMarkAsRead = async (id: string) => {
-    setAdminInquiries(prev => prev.map(inq => inq.id === id ? { ...inq, isRead: 1 } : inq));
-    setUnreadCount(prev => Math.max(0, prev - 1));
-    setAnalyticsData((prev: any) => {
-      if (!prev) return prev;
-      return { ...prev, unreadCount: Math.max(0, prev.unreadCount - 1) };
-    });
-    try {
-      await adminFetch("/api/admin/mark-read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id })
-      });
-    } catch (err) {
-      console.error("Failed to mark inquiry as read on server:", err);
-    }
-  };
-
-  const handleUpdateStatus = async (inquiryId: string, status: "pending" | "contacted" | "done") => {
-    // Optimistic local state update
+  const handleUpdateInquiryStatus = async (inquiryId: string, status: string) => {
     setAdminInquiries(prev => prev.map(inq => inq.id === inquiryId ? { ...inq, status } : inq));
-    
-    // Also show a temporary success toast
-    showToast(`Status marked as ${status}`, "success");
-
     try {
       const response = await adminFetch("/api/admin/update-status", {
         method: "POST",
@@ -390,9 +506,56 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
+  const handleMarkAsRead = async (inquiryId: string) => {
+    setAdminInquiries(prev => prev.map(inq => inq.id === inquiryId ? { ...inq, isRead: 1 } : inq));
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    try {
+      await adminFetch("/api/admin/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inquiryId })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toggleInquiryExpand = (id: string, isRead: number) => {
     setExpandedInquiries(prev => ({ ...prev, [id]: !prev[id] }));
     if (isRead === 0) handleMarkAsRead(id);
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      const response = await adminFetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: adminSettings })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        showToast("Settings saved successfully!", "success");
+      } else {
+        showToast(data.message || "Failed to save settings.", "error");
+      }
+    } catch (err: any) {
+      showToast("Error saving settings: " + err.message, "error");
+    }
+  };
+
+  const handleTestEmail = async () => {
+    showToast("Dispatching test email...", "warning");
+    try {
+      const response = await adminFetch("/api/admin/test-email", { method: "POST" });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        showToast(data.message, "success");
+      } else {
+        showToast(data.message || "Test email failed.", "error");
+      }
+    } catch (err: any) {
+      showToast("Error sending test email: " + err.message, "error");
+    }
   };
 
   const handleExportCSV = () => {
@@ -400,137 +563,94 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       showToast("No inquiries available to export.", "warning");
       return;
     }
-    const headers = ["Name", "Phone", "Email", "Message", "Context", "Timestamp", "Dispatch Status"];
+    const headers = ["Name", "Phone", "Email", "Message", "Context", "Timestamp", "Status", "Dispatch Status"];
     const escapeCsvValue = (val: any) => {
-      if (val === null || val === undefined) return "";
-      let str = String(val);
-      str = str.replace(/"/g, '""');
-      if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) return `"${str}"`;
-      return str;
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
     };
-    const csvRows = [
-      headers.join(","),
-      ...adminInquiries.map(inq => [
-        escapeCsvValue(inq.name), escapeCsvValue(inq.phone), escapeCsvValue(inq.email),
-        escapeCsvValue(inq.message), escapeCsvValue(inq.context),
-        escapeCsvValue(inq.timestamp), escapeCsvValue(inq.dispatchStatus)
-      ].join(","))
-    ];
-    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const rows = adminInquiries.map(inq => [
+      escapeCsvValue(inq.name),
+      escapeCsvValue(inq.phone),
+      escapeCsvValue(inq.email),
+      escapeCsvValue(inq.message),
+      escapeCsvValue(inq.formContext || inq.context || "admission"),
+      escapeCsvValue(inq.timestamp),
+      escapeCsvValue(inq.status || "pending"),
+      escapeCsvValue(inq.dispatchStatus || "Pending")
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const dateStr = new Date().toISOString().split("T")[0];
-    link.setAttribute("href", url);
-    link.setAttribute("download", `amps-inquiries-${dateStr}.csv`);
-    link.style.visibility = "hidden";
+    link.href = url;
+    link.setAttribute("download", `AMPS_Inquiries_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast(`CSV exported: amps-inquiries-${dateStr}.csv`, "success");
+    showToast("Exported inquiries to CSV!", "success");
   };
 
-  const handleModalClose = () => {
-    setIsClosing(true);
-    setTimeout(() => { onClose(); setIsAdminAuthenticated(false); setAdminPasswordInput(""); setIsClosing(false); }, 250);
-  };
-
+  // ─── Filtered Inquiries List ──────────────────────────────────────────────────
   const getFilteredInquiries = () => {
-    // 1. Time / Read Filtering
-    let list = adminInquiries.filter((inq: any) => {
-      if (inquiryFilter === "unread") return inq.isRead === 0;
-      if (inquiryFilter === "last7") return new Date(inq.timestamp).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000;
-      if (inquiryFilter === "last30") return new Date(inq.timestamp).getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000;
-      return true;
-    });
+    let list = [...adminInquiries];
 
-    // 2. Status Filtering
-    if (inquiryStatusFilter !== "all") {
-      list = list.filter((inq: any) => {
-        const inqStatus = inq.status || "pending";
-        return inqStatus === inquiryStatusFilter;
-      });
+    if (inquiryFilter === "unread") {
+      list = list.filter(i => i.isRead === 0);
+    } else if (inquiryFilter === "last7") {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      list = list.filter(i => new Date(i.timestamp).getTime() >= sevenDaysAgo);
+    } else if (inquiryFilter === "last30") {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      list = list.filter(i => new Date(i.timestamp).getTime() >= thirtyDaysAgo);
     }
 
-    // 3. Sorting
-    list = [...list].sort((a: any, b: any) => {
-      const timeA = new Date(a.timestamp).getTime();
-      const timeB = new Date(b.timestamp).getTime();
+    if (inquiryStatusFilter !== "all") {
+      list = list.filter(i => (i.status || "pending") === inquiryStatusFilter);
+    }
 
-      if (inquirySort === "newest") {
-        return timeB - timeA;
-      }
-      if (inquirySort === "oldest") {
-        return timeA - timeB;
-      }
-      if (inquirySort === "pending_first") {
-        const getOrder = (status: string) => {
-          const s = status || "pending";
-          if (s === "pending") return 1;
-          if (s === "contacted") return 2;
-          return 3;
-        };
-        const orderA = getOrder(a.status);
-        const orderB = getOrder(b.status);
-        if (orderA !== orderB) return orderA - orderB;
-        return timeB - timeA; // tie-breaker: newest first
-      }
-      if (inquirySort === "done_last") {
-        const getOrder = (status: string) => {
-          const s = status || "pending";
-          if (s === "done") return 2;
-          return 1;
-        };
-        const orderA = getOrder(a.status);
-        const orderB = getOrder(b.status);
-        if (orderA !== orderB) return orderA - orderB;
-        return timeB - timeA; // tie-breaker: newest first
-      }
-      return 0;
-    });
+    if (inquirySort === "newest") {
+      list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    } else if (inquirySort === "oldest") {
+      list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    } else if (inquirySort === "pending_first") {
+      list.sort((a, b) => (a.status === "pending" ? -1 : 1));
+    } else if (inquirySort === "done_last") {
+      list.sort((a, b) => (a.status === "done" ? 1 : -1));
+    }
 
     return list;
   };
-  const filteredInquiries = getFilteredInquiries();
+
+  const filteredInquiriesList = getFilteredInquiries();
+
+  // ─── Permissions Config ──────────────────────────────────────────────────────
+  const canWipeAll = adminRole === "Superadmin";
+  const canDeleteInquiry = true;
+  const canManageStatus = true;
+  const canMarkRead = true;
+  const canManageUsers = adminRole === "Superadmin";
+  const canViewSettings = adminRole === "Superadmin";
+  const canRevokeAuditLog = adminRole === "Superadmin";
+  const canEditAuditLog = adminRole === "Superadmin";
 
   // ─── Sidebar Nav Config ───────────────────────────────────────────────────────
   const navItems = [
     { key: "inquiries", label: "Inquiries", icon: ClipboardList, badge: unreadCount > 0 ? unreadCount : null },
-    ...(adminRole === "Superadmin" ? [{ key: "settings", label: "Delivery Engines", icon: Settings }] : []),
+    { key: "audit_log", label: "Audit Log", icon: Activity, badge: null },
+    ...(canManageUsers ? [{ key: "users", label: "Users", icon: Users, badge: null }] : []),
+    ...(canViewSettings ? [{ key: "settings", label: "Settings", icon: Settings, badge: null }] : []),
+    { key: "my_profile", label: "My Profile", icon: Key, badge: null },
   ];
 
-  // ─── Password Field Helper ────────────────────────────────────────────────────
-  const PwField = ({
-    label, value, onChange, show, onToggle, required = true, placeholder = ""
-  }: {
-    label: string; value: string; onChange: (v: string) => void;
-    show: boolean; onToggle: () => void; required?: boolean; placeholder?: string;
-  }) => (
-    <div>
-      <label className="block text-[11px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">{label}</label>
-      <div className="relative">
-        <input
-          type={show ? "text" : "password"}
-          value={value}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 pr-11 text-sm font-mono text-slate-800 focus:outline-none focus:border-brass-gold focus:bg-white focus:ring-1 focus:ring-brass-gold/30 transition-all"
-        />
-        <button
-          type="button"
-          onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-          tabIndex={-1}
-        >
-          {show ? <EyeOff size={16} /> : <Eye size={16} />}
-        </button>
-      </div>
-    </div>
-  );
+  // Role selector options for professional login card selector
+  const rolesList = [
+    { key: "superadmin", label: "Superadmin", subtitle: "Full system access", icon: Crown },
+    { key: "chairman", label: "Chairman", subtitle: "Board oversight", icon: Shield },
+    { key: "administrator", label: "Administrator", subtitle: "Portal management", icon: Settings },
+    { key: "principal", label: "Principal", subtitle: "Academic oversight", icon: User }
+  ];
 
-  // ══════════════════════════════════════════════════════════════════════════════
-  // RENDER
-  // ══════════════════════════════════════════════════════════════════════════════
   return (
     <AnimatePresence>
       {!isClosing && (
@@ -538,35 +658,30 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[250] flex flex-col w-screen h-screen overflow-hidden"
-          style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif" }}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto transition-colors duration-300 ${
+            !isAdminAuthenticated ? "bg-[#EAE6DF]" : "bg-slate-950/70 backdrop-blur-md"
+          }`}
         >
-
-          {/* ── Toast Notifications ───────────────────────────────────────────── */}
-          <div className="fixed bottom-5 right-5 z-[999] flex flex-col gap-2 pointer-events-none">
+          {/* Toast Container */}
+          <div className="fixed top-5 right-5 z-50 space-y-2 pointer-events-none">
             <AnimatePresence>
               {toasts.map(toast => (
                 <motion.div
                   key={toast.id}
-                  initial={{ opacity: 0, y: 20, x: 20 }}
-                  animate={{ opacity: 1, y: 0, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.25 }}
-                  className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl max-w-sm border backdrop-blur-sm ${toast.type === "success" ? "bg-emerald-900/95 border-emerald-700/50 text-emerald-100" :
-                    toast.type === "error" ? "bg-rose-900/95 border-rose-700/50 text-rose-100" :
-                      "bg-amber-900/95 border-amber-700/50 text-amber-100"
-                    }`}
+                  initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -20, scale: 0.9 }}
+                  className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-xs font-semibold max-w-sm ${
+                    toast.type === "success" ? "bg-emerald-950 text-emerald-200 border-emerald-800" :
+                    toast.type === "error" ? "bg-rose-950 text-rose-200 border-rose-800" :
+                    "bg-amber-950 text-amber-200 border-amber-800"
+                  }`}
                 >
-                  <div className="shrink-0 mt-0.5">
-                    {toast.type === "success" ? <CheckCircle size={16} /> :
-                      toast.type === "error" ? <XCircle size={16} /> : <AlertTriangle size={16} />}
-                  </div>
-                  <p className="text-xs font-medium leading-relaxed flex-1">{toast.msg}</p>
-                  <button
-                    onClick={() => dismissToast(toast.id)}
-                    className="shrink-0 text-white/50 hover:text-white transition-colors cursor-pointer mt-0.5"
-                  >
+                  {toast.type === "success" && <CheckCircle size={16} className="text-emerald-400 shrink-0" />}
+                  {toast.type === "error" && <XCircle size={16} className="text-rose-400 shrink-0" />}
+                  {toast.type === "warning" && <AlertTriangle size={16} className="text-amber-400 shrink-0" />}
+                  <span className="flex-1">{toast.msg}</span>
+                  <button onClick={() => dismissToast(toast.id)} className="opacity-60 hover:opacity-100 cursor-pointer">
                     <X size={14} />
                   </button>
                 </motion.div>
@@ -574,879 +689,900 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
             </AnimatePresence>
           </div>
 
-          {/* ════════════════════════════════════════════════════════════════════ */}
-          {/* LOGIN SCREEN */}
+          {/* ═════════════════════════════════════════════════════════════════════
+              PROFESSIONAL NAVY LOGIN SCREEN (Unauthenticated State)
+          ══════════════════════════════════════════════════════════════════════ */}
           {!isAdminAuthenticated ? (
-            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#f0ece4" }} className="p-3 md:p-6 overflow-y-auto">
-              <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: "easeOut" }}
-                className="flex flex-col md:flex-row w-full max-w-[820px] overflow-hidden border border-[#e2d9cc] rounded-lg md:rounded-xl shadow-none md:shadow-[0_8px_32px_rgba(0,0,0,0.12)] bg-[#faf8f4]"
-              >
-                {/* LEFT PANEL */}
-                <div 
-                  className="w-full md:w-[40%] shrink-0 flex flex-col items-center justify-center text-center p-5 md:p-[40px_28px] border-b-4 md:border-b-0 md:border-r-4 border-[#C9A227]"
-                  style={{ background: "#14213D" }}
-                >
-                  {/* Crest */}
-                  <div className="w-[64px] h-[64px] md:w-[84px] md:h-[84px] rounded-full border-2 border-[#C9A227] overflow-hidden mb-3 md:mb-5 shrink-0">
-                    <img src="/assets/crest.png" alt="AMPS Crest" onError={(e) => { (e.target as HTMLImageElement).src = "/assets/logo.jpeg"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-12 min-h-0"
+            >
+              {/* Left Navy Branding Panel with Gold Border */}
+              <div className="md:col-span-5 bg-[#0F1E36] p-5 text-white flex flex-col justify-between items-center text-center relative overflow-hidden border-r-4 border-[#C9A227]">
+                <div className="absolute -top-16 -left-16 w-40 h-40 bg-[#C9A227]/10 rounded-full blur-3xl" />
+                
+                {/* Centered Main Brand Block */}
+                <div className="relative z-10 w-full my-auto py-2">
+                  <div className="w-20 h-20 rounded-full bg-white p-1 border-2 border-[#C9A227] shadow-xl mx-auto mb-3 flex items-center justify-center overflow-hidden">
+                    <img src="/assets/logo.jpeg" alt="Logo" className="w-full h-full object-contain rounded-full" />
                   </div>
 
-                  {/* School name */}
-                  <p style={{ fontFamily: "Georgia, serif", color: "#ffffff", lineHeight: 1.4 }} className="text-xs md:text-sm mb-1 md:mb-1.5">Ashish Memorial Public Sr. Sec. School</p>
-                  <p style={{ fontFamily: "monospace", color: "#C9A227", fontSize: 9, textTransform: "uppercase", letterSpacing: 2 }} className="mb-2 md:mb-5">Administration Portal</p>
-
-                  {/* Gold divider - Hidden on mobile */}
-                  <div className="hidden md:block" style={{ width: "80%", height: 1, background: "rgba(201,162,39,0.25)", marginBottom: 20 }} />
-
-                  {/* Feature bullets - Hidden on mobile */}
-                  <div className="hidden md:flex flex-col gap-2.5 w-full text-left">
-                    {[
-                      { icon: Lock, text: "256-bit bcrypt encrypted sessions" },
-                      { icon: Bell, text: "Real-time inquiry notifications" },
-                      { icon: BarChart3, text: "Analytics and delivery tracking" },
-                    ].map(({ icon: Icon, text }) => (
-                      <div key={text} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Icon size={13} style={{ color: "#C9A227", flexShrink: 0 }} />
-                        <span style={{ color: "#94a3b8", fontSize: 11 }}>{text}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Footer */}
-                  <p style={{ fontFamily: "monospace", color: "rgba(255,255,255,0.2)", fontSize: 9 }} className="mt-2 md:mt-8">Hindaun City, Rajasthan · Est. 2005</p>
+                  <h3 className="font-serif font-bold text-sm text-white leading-tight px-1">Ashish Memorial Public Sr. Sec. School</h3>
+                  <p className="text-[9px] font-mono text-[#C9A227] uppercase tracking-widest mt-1 font-bold">ADMINISTRATION PORTAL</p>
+                  <p className="text-[9px] font-mono text-slate-400 mt-1">Hindaun City, Rajasthan · Est. 2005</p>
+                  
+                  <div className="w-12 h-0.5 bg-[#C9A227]/50 mx-auto mt-3 mb-2" />
                 </div>
 
-                {/* RIGHT PANEL */}
-                <div 
-                  className="flex-1 border-t-4 md:border-t-0 border-[#C9A227] p-5 md:p-[2rem_1.5rem] flex flex-col justify-center relative bg-[#faf8f4]"
-                >
-                  {/* Close button */}
-                  <button
-                    onClick={handleModalClose}
-                    style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 4, borderRadius: 6, lineHeight: 1 }}
-                  >
-                    <X size={16} />
-                  </button>
+                {/* Bottom Small Feature Lines */}
+                <div className="relative z-10 w-full pt-2">
+                  <div className="space-y-2 text-[10px] font-light text-slate-300 text-left max-w-[210px] mx-auto">
+                    <div className="flex items-center gap-2">
+                      <Lock size={12} className="text-[#C9A227] shrink-0" />
+                      <span>256-bit bcrypt encrypted sessions</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Bell size={12} className="text-[#C9A227] shrink-0" />
+                      <span>Real-time inquiry notifications</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <BarChart3 size={12} className="text-[#C9A227] shrink-0" />
+                      <span>Analytics and delivery tracking</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                  {/* Heading */}
-                  <p style={{ fontFamily: "monospace", color: "#C9A227", fontSize: 9, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>Secure Sign In</p>
-                  <h2 style={{ fontFamily: "Georgia, serif", color: "#14213D", fontWeight: 500, wordBreak: "break-word", overflowWrap: "break-word" }} className="text-base md:text-lg mb-4 md:mb-5 leading-tight">
-                    Select your role and enter credentials
-                  </h2>
+              {/* Right Role Selector & Login Form */}
+              <div className="md:col-span-7 p-5 flex flex-col justify-between bg-[#FDFBF7]">
+                <div>
+                  <div className="flex justify-between items-start mb-3.5">
+                    <div>
+                      <span className="text-[9px] font-bold font-mono text-[#C9A227] uppercase tracking-widest">SECURE SIGN IN</span>
+                      <h3 className="text-base font-bold text-slate-800 font-serif mt-0.5">Select your role and enter credentials</h3>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 cursor-pointer transition-colors">
+                      <X size={16} />
+                    </button>
+                  </div>
 
-                  {/* Role Cards */}
-                  <p style={{ fontFamily: "monospace", color: "#64748b", fontSize: 9, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Select Role</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
-                    {[
-                      { value: "superadmin", label: "Superadmin", icon: ShieldAlert, desc: "Full system access" },
-                      { value: "chairman", label: "Chairman", icon: Crown, desc: "Board oversight" },
-                      { value: "administrator", label: "Administrator", icon: Settings, desc: "Portal management" },
-                      { value: "principal", label: "Principal", icon: User, desc: "Academic oversight" },
-                    ].map(card => {
-                      const Icon = card.icon;
-                      const isSelected = adminUsernameInput === card.value;
-                      return (
+                  {/* Role Cards Grid */}
+                  <div className="mb-3.5">
+                    <label className="block text-[9px] font-bold font-mono text-slate-400 uppercase tracking-widest mb-1.5">SELECT ROLE</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { key: "superadmin", label: "Superadmin", subtitle: "Full system access", icon: Shield, defaultPw: "ampssuperadmin" },
+                        { key: "chairman", label: "Chairman", subtitle: "Board oversight", icon: Crown, defaultPw: "ampschairman" },
+                        { key: "administrator", label: "Administrator", subtitle: "Portal management", icon: Settings, defaultPw: "ampsadmin" },
+                        { key: "principal", label: "Principal", subtitle: "Academic oversight", icon: User, defaultPw: "ampsprincipal" }
+                      ].map(r => {
+                        const Icon = r.icon;
+                        const isSelected = adminUsernameInput.toLowerCase() === r.key.toLowerCase();
+                        return (
+                          <button
+                            key={r.key}
+                            type="button"
+                            onClick={() => {
+                              setAdminUsernameInput(r.key);
+                              setAdminPasswordInput(r.defaultPw);
+                              setAdminErrorMsg("");
+                            }}
+                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex items-center gap-2 ${
+                              isSelected
+                                ? "bg-[#FFFDF4] border-2 border-[#C9A227] shadow-sm"
+                                : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                            }`}
+                          >
+                            <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${
+                              isSelected ? "bg-[#C9A227]/10 text-[#C9A227]" : "bg-slate-100 text-slate-400"
+                            }`}>
+                              <Icon size={14} />
+                            </div>
+                            <div>
+                              <h4 className="text-[11px] font-bold text-slate-900 font-serif leading-tight">{r.label}</h4>
+                              <p className="text-[9px] text-slate-400 font-sans leading-tight mt-0.5">{r.subtitle}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {adminErrorMsg && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-rose-50 border border-rose-200 text-rose-700 text-[11px] p-2 rounded-lg mb-3 flex items-center gap-1.5 font-medium"
+                    >
+                      <AlertTriangle size={14} className="shrink-0" />
+                      <span>{adminErrorMsg}</span>
+                    </motion.div>
+                  )}
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="block text-[9px] font-bold font-mono text-slate-400 uppercase tracking-widest mb-1">PASSWORD</label>
+                      <div className="relative">
+                        <input
+                          type={showLoginPassword ? "text" : "password"}
+                          placeholder="Enter password..."
+                          value={adminPasswordInput}
+                          onChange={(e) => setAdminPasswordInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleAdminLogin()}
+                          className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 pr-10 text-xs font-mono text-slate-800 focus:outline-none focus:border-[#C9A227] transition-all shadow-sm"
+                        />
                         <button
-                          key={card.value}
                           type="button"
-                          onClick={() => setAdminUsernameInput(card.value)}
-                          className="flex items-center gap-1.5 md:gap-2.5 rounded-lg cursor-pointer text-left transition-all p-2 md:p-[10px_12px]"
-                          style={{
-                            background: isSelected ? "#fdf8ec" : "#ffffff",
-                            border: isSelected ? "2px solid #C9A227" : "1px solid #e2d9cc",
-                            borderLeft: isSelected ? "4px solid #C9A227" : "1px solid #e2d9cc",
-                            minWidth: 0
-                          }}
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                         >
-                          <Icon size={14} style={{ color: isSelected ? "#C9A227" : "#64748b", flexShrink: 0 }} />
-                          <div style={{ minWidth: 0 }}>
-                            <p style={{ color: "#14213D", fontWeight: 500, margin: 0 }} className="text-[11px] md:text-xs leading-snug truncate">{card.label}</p>
-                            <p style={{ color: "#94a3b8", margin: 0 }} className="text-[9px] md:text-[10px] leading-snug truncate">{card.desc}</p>
-                          </div>
+                          {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
-                      );
-                    })}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotPasswordModal(true)}
+                        className="text-rose-600 hover:text-rose-800 font-semibold cursor-pointer underline text-[11px]"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
                   </div>
+                </div>
 
-                  {/* Password Field */}
-                  <p style={{ fontFamily: "monospace", color: "#64748b", fontSize: 9, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 6 }}>Password</p>
-                  <div style={{ position: "relative", marginBottom: 10 }}>
-                    <input
-                      id="admin-login-password"
-                      type={showLoginPassword ? "text" : "password"}
-                      value={adminPasswordInput}
-                      onChange={(e) => setAdminPasswordInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAdminLogin()}
-                      placeholder="Enter password..."
-                      style={{ width: "100%", background: "#ffffff", border: "1px solid #d1c9bc", borderRadius: 8, padding: "10px 40px 10px 12px", fontSize: 13, color: "#14213D", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowLoginPassword(v => !v)}
-                      tabIndex={-1}
-                      style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 0, lineHeight: 1 }}
-                    >
-                      {showLoginPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-
-                  {/* Forgot Password */}
-                  <div style={{ marginBottom: 14 }}>
-                    <button
-                      type="button"
-                      onClick={() => setShowForgotPassword(v => !v)}
-                      style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", color: "#8B1E3F", fontSize: 11, fontFamily: "monospace", padding: 0 }}
-                    >
-                      <HelpCircle size={11} />
-                      Forgot password?
-                    </button>
-                    <AnimatePresence>
-                      {showForgotPassword && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.18 }}
-                          style={{ overflow: "hidden" }}
-                        >
-                          <div style={{ marginTop: 8, background: "#fff8f0", border: "1px solid #e2d9cc", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
-                            <p style={{ margin: "0 0 4px", color: "#14213D", fontWeight: 600 }}>🔑 Active Console Passwords:</p>
-                            <p style={{ margin: 0 }}>• <strong>Superadmin:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampssuperadmin</code> (or <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code>)</p>
-                            <p style={{ margin: 0 }}>• <strong>Chairman:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampschairman</code> (or <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code>)</p>
-                            <p style={{ margin: 0 }}>• <strong>Administrator:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code></p>
-                            <p style={{ margin: 0 }}>• <strong>Principal:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsprincipal</code> (or <code className="bg-amber-100/60 px-1 py-0.5 rounded text-slate-800 font-mono">ampsadmin</code>)</p>
-                            <button
-                              type="button"
-                              onClick={() => setShowForgotPassword(false)}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#8B1E3F", fontSize: 10, fontFamily: "monospace", padding: 0, marginTop: 6, textDecoration: "underline" }}
-                            >
-                              ← Back to login
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Error / Success */}
-                  <AnimatePresence>
-                    {adminErrorMsg && (
-                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        style={{ fontSize: 11, color: "#dc2626", marginBottom: 10, margin: "0 0 10px" }}>
-                        {adminErrorMsg}
-                      </motion.p>
-                    )}
-                    {adminSuccessMsg && (
-                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        style={{ fontSize: 11, color: "#16a34a", marginBottom: 10, margin: "0 0 10px" }}>
-                        {adminSuccessMsg}
-                      </motion.p>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Authenticate Button */}
+                <div className="pt-5">
                   <button
-                    id="admin-login-btn"
                     onClick={handleAdminLogin}
                     disabled={isLoggingIn}
-                    style={{
-                      width: "100%", background: "#14213D", color: "#ffffff",
-                      border: "1px solid #C9A227", borderRadius: 8, padding: 12,
-                      fontFamily: "monospace", fontSize: 11, textTransform: "uppercase",
-                      letterSpacing: 1.5, cursor: isLoggingIn ? "not-allowed" : "pointer",
-                      opacity: isLoggingIn ? 0.7 : 1, display: "flex", alignItems: "center",
-                      justifyContent: "center", gap: 8, transition: "opacity 0.2s"
-                    }}
+                    className="w-full bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {isLoggingIn ? (
-                      <div className="animate-spin" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #ffffff" }} />
-                    ) : (
-                      <Lock size={13} />
-                    )}
-                    {isLoggingIn ? "Authenticating..." : "Authenticate Console"}
+                    {isLoggingIn ? <Loader2 size={16} className="animate-spin text-[#C9A227]" /> : <Lock size={15} className="text-[#C9A227]" />}
+                    <span>{isLoggingIn ? "AUTHENTICATING..." : "AUTHENTICATE CONSOLE"}</span>
                   </button>
-
-                  {/* Footer note */}
-                  <p style={{ fontFamily: "monospace", color: "#94a3b8", fontSize: 10, textAlign: "center", marginTop: 14 }}>
-                    Authorized personnel only · Session expires after 20 min inactivity
-                  </p>
+                  <p className="text-[10px] text-slate-400 text-center font-mono mt-2">Authorized personnel only · Session expires after 20 min inactivity</p>
                 </div>
-              </motion.div>
-            </div>
-
-            /* ════════════════════════════════════════════════════════════════════ */
-            /* MAIN DASHBOARD                                                      */
-            /* ════════════════════════════════════════════════════════════════════ */
+              </div>
+            </motion.div>
           ) : (
-            <div className="flex-1 overflow-hidden flex bg-slate-100">
-
-              {/* ── Sidebar ──────────────────────────────────────────────────── */}
-              <div className="hidden md:flex md:w-64 md:flex-col bg-[#0d1b3e] shrink-0 border-r border-white/10">
-                {/* Sidebar Header */}
-                <div className="px-5 py-5 border-b border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg overflow-hidden border-2 shrink-0" style={{ borderColor: "#c9a84c" }}>
-                      <img src="/assets/logo.jpeg" alt="AMPS" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-white font-bold text-sm leading-tight truncate">AMPS Portal</p>
-                      <p className="text-[10px] font-mono truncate" style={{ color: "#c9a84c" }}>Admin Console</p>
-                    </div>
+            /* ═════════════════════════════════════════════════════════════════════
+                NAVY DASHBOARD CONTAINER (Authenticated State)
+            ══════════════════════════════════════════════════════════════════════ */
+            <motion.div
+              initial={{ scale: 0.98, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.98, opacity: 0 }}
+              className="bg-slate-50 rounded-3xl w-full max-w-6xl h-[90vh] overflow-hidden shadow-2xl border border-slate-800 flex flex-col"
+            >
+              {/* Impersonation Banner */}
+              {impersonatedBy && (
+                <div className="bg-amber-500 text-slate-950 font-mono text-xs px-6 py-2.5 flex items-center justify-between font-bold border-b border-amber-600 shadow-inner">
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={16} />
+                    <span>Impersonating user '{adminUsername}' ({adminRole}) — Session initiated by Superadmin ({impersonatedBy})</span>
                   </div>
-                  <div className="mt-4 bg-white/10 border border-white/15 rounded-lg px-3 py-2.5">
-                    <p className="text-[10px] text-white/60 font-mono uppercase tracking-widest mb-0.5">Signed in as</p>
-                    <p className="text-sm font-bold text-white truncate">{adminUsername}</p>
-                    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md mt-1 font-mono uppercase tracking-wider"
-                      style={{ background: "#c9a84c30", color: "#f0d080", border: "1px solid #c9a84c60" }}>
-                      {adminRole}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Nav Items */}
-                <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-                  {navItems.map(item => {
-                    const Icon = item.icon;
-                    const isActive = adminActiveTab === item.key;
-                    return (
-                      <button
-                        key={item.key}
-                        onClick={() => {
-                          setAdminActiveTab(item.key as any);
-                          setAdminErrorMsg(""); setAdminSuccessMsg("");
-                          if (item.key === "inquiries") refreshInquiries();
-                        }}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer relative ${isActive
-                          ? "text-white"
-                          : "text-white/75 hover:text-white hover:bg-white/10"
-                          }`}
-                        style={isActive ? {
-                          background: "linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.05))",
-                          border: "1px solid rgba(201,168,76,0.25)",
-                          boxShadow: "inset 3px 0 0 #c9a84c"
-                        } : {}}
-                      >
-                        <Icon size={16} style={{ color: isActive ? "#c9a84c" : "rgba(255,255,255,0.75)" }} />
-                        <span className="flex-1 text-left text-xs font-semibold truncate">{item.label}</span>
-                        {item.badge && (
-                          <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </nav>
-
-                {/* Sidebar Footer: Logout + Close */}
-                <div className="px-3 py-4 border-t border-white/10 space-y-2">
                   <button
-                    onClick={() => handleLogout()}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-400 hover:text-rose-200 hover:bg-rose-900/40 text-xs font-bold transition-all cursor-pointer"
+                    onClick={handleExitImpersonation}
+                    className="bg-slate-950 hover:bg-slate-900 text-amber-400 px-3 py-1 rounded-lg font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
                   >
-                    <LogOut size={15} />
-                    Logout
-                  </button>
-                  <button
-                    onClick={handleModalClose}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/60 hover:text-white hover:bg-white/10 text-xs font-semibold transition-all cursor-pointer"
-                  >
-                    <X size={15} />
-                    Close Panel
+                    <CornerUpLeft size={13} /> Exit Impersonation
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* ── Mobile Top Bar ────────────────────────────────────────────── */}
-              <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-[#0d1b3e] border-b border-white/10 px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg overflow-hidden border-2" style={{ borderColor: "#c9a84c" }}>
-                    <img src="/assets/logo.jpeg" alt="AMPS" className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <p className="text-white font-bold text-xs leading-tight">AMPS Portal</p>
-                    <p className="text-[9px] font-mono" style={{ color: "#c9a84c" }}>{adminRole} · {adminUsername}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handleLogout()}
-                    className="text-rose-400 p-1.5 rounded-lg hover:bg-rose-900/30 cursor-pointer transition-colors">
-                    <LogOut size={16} />
-                  </button>
-                  <button onClick={handleModalClose}
-                    className="text-white/40 p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors">
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
+              {/* Sidebar + Content */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Navy Left Sidebar Panel */}
+                <div className="w-64 bg-[#14213D] text-slate-300 p-5 flex flex-col justify-between border-r border-slate-800 shrink-0">
+                  <div className="space-y-6">
+                    {/* Sidebar Brand */}
+                    <div className="flex items-center gap-3 pb-5 border-b border-slate-800">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 p-1 backdrop-blur border border-white/10 flex items-center justify-center">
+                        <img src="/assets/logo.jpeg" alt="Logo" className="w-full h-full object-cover rounded-xl" />
+                      </div>
+                      <div>
+                        <h2 className="font-serif font-bold text-sm text-white leading-tight">AMPS Portal</h2>
+                        <p className="text-[10px] font-mono text-[#C9A227]">Admin Console</p>
+                      </div>
+                    </div>
 
-              {/* ── Mobile Bottom Nav ─────────────────────────────────────────── */}
-              <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0d1b3e] border-t border-white/10 flex">
-                {navItems.map(item => {
-                  const Icon = item.icon;
-                  const isActive = adminActiveTab === item.key;
-                  return (
-                    <button
-                      key={item.key}
-                      onClick={() => {
-                        setAdminActiveTab(item.key as any);
-                        setAdminErrorMsg(""); setAdminSuccessMsg("");
-                        if (item.key === "inquiries") refreshInquiries();
-                      }}
-                      className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-1 relative transition-colors cursor-pointer ${isActive ? "text-[#f0d080]" : "text-white/40"
-                        }`}
-                    >
-                      <Icon size={15} />
-                      <span className="text-[9px] font-bold uppercase tracking-wider truncate px-1">{item.label.split(" ")[0]}</span>
-                      {item.badge && (
-                        <span className="absolute top-1 right-1/4 bg-rose-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                    {/* Signed In User Card */}
+                    <div className="bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800 space-y-1 font-mono">
+                      <p className="text-[9px] text-slate-400 uppercase tracking-widest">SIGNED IN AS</p>
+                      <p className="text-sm font-bold text-white truncate">{adminUsername}</p>
+                      <span className="inline-block bg-[#C9A227]/20 text-[#C9A227] border border-[#C9A227]/40 text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+                        {adminRole}
+                      </span>
+                    </div>
 
-              {/* ── Main Content Area ─────────────────────────────────────────── */}
-              <div className="flex-1 overflow-y-auto md:pt-0 pt-14 pb-16 md:pb-0">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={adminActiveTab}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -12 }}
-                    transition={{ duration: 0.2 }}
-                    className="p-6 md:p-8 min-h-full"
-                  >
-
-                    {/* ══ INQUIRIES TAB ══════════════════════════════════════════ */}
-                    {adminActiveTab === "inquiries" && (
-                      <div className="space-y-6">
-                        {/* Header */}
-                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                          <div>
-                            <h2 className="text-xl font-bold text-slate-900">Prospective Leads</h2>
-                            <p className="text-xs text-slate-500 mt-0.5">Real-time database of all inquiry submissions</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={handleExportCSV}
-                              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg cursor-pointer transition-colors shadow-sm">
-                              <Download size={13} /> Export CSV
-                            </button>
-                            <button onClick={refreshInquiries}
-                              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg border border-slate-200 cursor-pointer transition-colors shadow-sm">
-                              <RefreshCw size={13} /> Refresh
-                            </button>
-                            {adminRole === "Superadmin" ? (
-                              <button onClick={handleClearAllInquiries}
-                                className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg cursor-pointer transition-colors">
-                                <Trash2 size={13} /> Wipe Logs
-                              </button>
-                            ) : (
-                              <button disabled title="Superadmin only"
-                                className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-300 text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg cursor-not-allowed">
-                                <Trash2 size={13} /> Wipe Logs
-                              </button>
+                    {/* Sidebar Nav Items */}
+                    <div className="space-y-1.5">
+                      {navItems.map(item => {
+                        const Icon = item.icon;
+                        const isActive = adminActiveTab === item.key;
+                        return (
+                          <button
+                            key={item.key}
+                            onClick={() => setAdminActiveTab(item.key as any)}
+                            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium text-xs transition-all cursor-pointer ${
+                              isActive ? "bg-white/15 text-white font-bold border border-white/20 shadow-md" : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Icon size={16} className={isActive ? "text-[#C9A227]" : "text-slate-400"} />
+                              <span>{item.label}</span>
+                            </div>
+                            {item.badge !== null && item.badge !== undefined && (
+                              <span className="bg-rose-500 text-white text-[10px] font-bold font-mono px-2 py-0.5 rounded-full">
+                                {item.badge}
+                              </span>
                             )}
-                          </div>
-                        </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-                        {/* Analytics Cards */}
-                        {analyticsData && (
-                          <div className="space-y-5">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                              {[
-                                { label: "Total Inquiries", value: analyticsData.totalInquiries, color: "text-indigo-600", filter: "all", accent: "border-indigo-200 bg-indigo-50/50" },
-                                { label: "Unread", value: analyticsData.unreadCount, color: "text-rose-600", filter: "unread", accent: "border-rose-200 bg-rose-50/50" },
-                                { label: "Last 7 Days", value: analyticsData.last7Days, color: "text-violet-600", filter: "last7", accent: "border-violet-200 bg-violet-50/50" },
-                                { label: "Last 30 Days", value: analyticsData.last30Days, color: "text-emerald-600", filter: "last30", accent: "border-emerald-200 bg-emerald-50/50" },
-                              ].map(stat => (
-                                <motion.button
-                                  key={stat.filter}
-                                  whileHover={{ y: -2, scale: 1.01 }}
-                                  whileTap={{ scale: 0.98 }}
-                                  onClick={() => setInquiryFilter(stat.filter as any)}
-                                  className={`text-left p-4 bg-white rounded-xl border shadow-sm transition-all cursor-pointer ${inquiryFilter === stat.filter ? stat.accent + " ring-1 ring-inset ring-current" : "border-slate-200 hover:border-slate-300"
-                                    }`}
+                  {/* Sidebar Footer Buttons */}
+                  <div className="pt-4 border-t border-slate-800 space-y-2">
+                    <button
+                      onClick={() => handleLogout()}
+                      className="w-full flex items-center gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 px-3 py-2 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer"
+                    >
+                      <LogOut size={15} /> Logout
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="w-full flex items-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 px-3 py-2 rounded-xl text-xs font-mono transition-colors cursor-pointer"
+                    >
+                      <X size={15} /> Close Panel
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main View Area */}
+                <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                  <AnimatePresence mode="wait">
+                    {/* ══ 1. INQUIRIES TAB ═════════════════════════════════════════════ */}
+                    {adminActiveTab === "inquiries" && (
+                      <motion.div key="inquiries" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                              <h2 className="text-lg font-bold text-slate-900 font-serif">Admission & Counselling Leads</h2>
+                              <p className="text-xs text-slate-500 font-mono">Real-time student submissions ({filteredInquiriesList.length} shown)</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={handleExportCSV}
+                                className="flex items-center gap-1.5 bg-[#14213D] hover:bg-[#1e2f54] text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm"
+                              >
+                                <Download size={13} /> Export CSV
+                              </button>
+                              {canWipeAll && (
+                                <button
+                                  onClick={handleClearAllInquiries}
+                                  className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer"
                                 >
-                                  <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold mb-1">{stat.label}</p>
-                                  <p className={`text-3xl font-black ${stat.color}`}>{stat.value}</p>
-                                  {stat.filter === "unread" && analyticsData.unreadCount > 0 && (
-                                    <span className="relative flex h-2 w-2 mt-2">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
-                                    </span>
-                                  )}
-                                </motion.button>
+                                  <Trash2 size={13} /> Wipe All
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Time & Status Filter Pills */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+                            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                              {[
+                                { id: "all", label: "All Inquiries" },
+                                { id: "unread", label: "Unread" },
+                                { id: "last7", label: "Last 7 Days" },
+                                { id: "last30", label: "Last 30 Days" }
+                              ].map(f => (
+                                <button
+                                  key={f.id}
+                                  onClick={() => setInquiryFilter(f.id as any)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    inquiryFilter === f.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                                  }`}
+                                >
+                                  {f.label}
+                                </button>
                               ))}
                             </div>
 
-                            {/* Charts */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                              <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                                <p className="text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-4">Daily Submission Trend (30 Days)</p>
-                                <div className="h-48 flex items-end gap-[2px] border-b border-slate-100 pb-1 pt-4 relative">
-                                  {analyticsData.dailyCounts.map((day: any) => {
-                                    const maxVal = Math.max(...analyticsData.dailyCounts.map((d: any) => d.count), 1);
-                                    const heightPct = (day.count / maxVal) * 100;
-                                    return (
-                                      <div key={day.date} className="flex-1 h-full flex items-end justify-center group relative">
-                                        <motion.div
-                                          initial={{ height: 0 }}
-                                          animate={{ height: `${Math.max(heightPct, 3)}%` }}
-                                          transition={{ duration: 0.8, ease: "easeOut" }}
-                                          className="w-full rounded-t transition-colors"
-                                          style={{ background: "linear-gradient(180deg, #6366f1, #4f46e5)" }}
-                                        />
-                                        <div className="opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[9px] font-mono px-2 py-1 rounded absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap pointer-events-none transition-all z-10 shadow-md">
-                                          {day.date}: {day.count}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="flex justify-between text-[9px] font-mono text-slate-400 mt-2">
-                                  <span>{analyticsData.dailyCounts[0]?.date}</span>
-                                  <span>{analyticsData.dailyCounts[14]?.date}</span>
-                                  <span>{analyticsData.dailyCounts[29]?.date}</span>
-                                </div>
-                              </div>
-
-                              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                                <p className="text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-5">Context Breakdown</p>
-                                <div className="space-y-5">
-                                  {[
-                                    { key: "admission", label: "Admission", color: "#6366f1" },
-                                    { key: "counselling", label: "Counselling", color: "#10b981" },
-                                  ].map(ctx => {
-                                    const val = analyticsData.byContext[ctx.key] || 0;
-                                    const pct = analyticsData.totalInquiries > 0 ? Math.round((val / analyticsData.totalInquiries) * 100) : 0;
-                                    return (
-                                      <div key={ctx.key}>
-                                        <div className="flex justify-between text-xs mb-1.5">
-                                          <span className="font-semibold text-slate-700">{ctx.label}</span>
-                                          <span className="font-mono text-slate-400">{val} ({pct}%)</span>
-                                        </div>
-                                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                          <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${pct}%` }}
-                                            transition={{ duration: 0.8, ease: "easeOut" }}
-                                            className="h-full rounded-full"
-                                            style={{ background: ctx.color }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <p className="text-[9px] font-mono text-slate-400 text-center mt-5 pt-3 border-t border-slate-100 font-bold uppercase">
-                                  Real-time interest tracking
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Filters and Sorts Panel */}
-                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3.5">
-                          {/* Row 1: Time Filters & Sort Dropdown */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold mr-1">Timeframe:</span>
-                              {[
-                                { key: "all", label: "All time" },
-                                { key: "unread", label: "Unread" },
-                                { key: "last7", label: "Last 7 days" },
-                                { key: "last30", label: "Last 30 days" }
-                              ].map(tf => {
-                                const isActive = inquiryFilter === tf.key;
-                                return (
-                                  <button
-                                    key={tf.key}
-                                    onClick={() => setInquiryFilter(tf.key as any)}
-                                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
-                                      isActive 
-                                        ? "bg-[#14213D] border-[#14213D] text-white" 
-                                        : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                                    }`}
-                                  >
-                                    {tf.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Sort Dropdown */}
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold">Sort:</span>
+                              <select
+                                value={inquiryStatusFilter}
+                                onChange={(e) => setInquiryStatusFilter(e.target.value as any)}
+                                className="border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
+                              >
+                                <option value="all">Status: All</option>
+                                <option value="pending">Status: Pending</option>
+                                <option value="contacted">Status: Contacted</option>
+                                <option value="done">Status: Done</option>
+                              </select>
+
                               <select
                                 value={inquirySort}
                                 onChange={(e) => setInquirySort(e.target.value as any)}
-                                className="bg-white border border-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-300 cursor-pointer"
+                                className="border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
                               >
-                                <option value="newest">Newest first</option>
-                                <option value="oldest">Oldest first</option>
-                                <option value="pending_first">Pending first</option>
-                                <option value="done_last">Done last</option>
+                                <option value="newest">Sort: Newest First</option>
+                                <option value="oldest">Sort: Oldest First</option>
+                                <option value="pending_first">Sort: Pending First</option>
                               </select>
                             </div>
                           </div>
-
-                          {/* Row 2: Status Filters */}
-                          <div className="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100">
-                            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold mr-1">Status:</span>
-                            {[
-                              { key: "all", label: "All" },
-                              { key: "pending", label: "Pending" },
-                              { key: "contacted", label: "Contacted" },
-                              { key: "done", label: "Done" }
-                            ].map(st => {
-                              const isActive = inquiryStatusFilter === st.key;
-                              return (
-                                <button
-                                  key={st.key}
-                                  onClick={() => setInquiryStatusFilter(st.key as any)}
-                                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
-                                    isActive 
-                                      ? "bg-[#14213D] border-[#14213D] text-white" 
-                                      : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                                  }`}
-                                >
-                                  {st.label}
-                                </button>
-                              );
-                            })}
-                          </div>
                         </div>
 
-                        {/* Active Filter Indicators Helper Banner */}
-                        {(inquiryFilter !== "all" || inquiryStatusFilter !== "all") && (
-                          <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-2 rounded-xl text-xs flex justify-between items-center animate-fadeIn">
-                            <span className="font-medium">
-                              Active Filter: {inquiryFilter !== "all" ? `Timeframe (${inquiryFilter})` : ""} {inquiryFilter !== "all" && inquiryStatusFilter !== "all" ? " + " : ""} {inquiryStatusFilter !== "all" ? `Status (${inquiryStatusFilter})` : ""} ({filteredInquiries.length} results)
-                            </span>
-                            <button 
-                              onClick={() => { setInquiryFilter("all"); setInquiryStatusFilter("all"); }}
-                              className="font-bold underline hover:text-indigo-600 cursor-pointer"
-                            >
-                              Reset Filters
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Inquiry Cards */}
-                        {filteredInquiries.length === 0 ? (
-                          <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl">
-                            <MessageSquare size={32} className="mx-auto mb-3 text-slate-300" />
-                            <p className="text-sm font-bold text-slate-400">No inquiries found</p>
-                            <p className="text-xs text-slate-300 mt-1">Try a different filter or submit a test inquiry.</p>
+                        {/* Inquiries Cards */}
+                        {filteredInquiriesList.length === 0 ? (
+                          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+                            <ClipboardList size={36} className="mx-auto text-slate-300 mb-3" />
+                            <h3 className="text-sm font-bold text-slate-700 font-serif">No Inquiries Found</h3>
+                            <p className="text-xs text-slate-400 mt-1">There are no inquiries matching the selected filters.</p>
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            {filteredInquiries.map((inq: any) => {
+                            {filteredInquiriesList.map(inq => {
                               const isExpanded = !!expandedInquiries[inq.id];
+                              const status = inq.status || "pending";
                               const isUnread = inq.isRead === 0;
-                              const inqStatus = inq.status || "pending";
-                              const opacityClass = inqStatus === "done" ? "opacity-60" : "opacity-100";
-                              
-                              let borderLeftStyle = "3px solid #C9A227"; // Default pending
-                              if (inqStatus === "contacted") {
-                                borderLeftStyle = "3px solid #1d4ed8";
-                              } else if (inqStatus === "done") {
-                                borderLeftStyle = "3px solid #16a34a";
-                              }
 
                               return (
-                                <motion.div
+                                <div
                                   key={inq.id}
-                                  layout
-                                  onClick={() => toggleInquiryExpand(inq.id, inq.isRead || 0)}
-                                  className={`bg-white border rounded-xl shadow-sm flex flex-col p-4 gap-3 cursor-pointer transition-all hover:shadow-md border-slate-200 ${opacityClass}`}
-                                  style={{ borderLeft: borderLeftStyle }}
+                                  className={`bg-white border rounded-2xl p-4 shadow-sm transition-all ${
+                                    isUnread ? "border-indigo-300 bg-indigo-50/20" : "border-slate-200 hover:border-slate-300"
+                                  }`}
                                 >
-                                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-bold text-slate-900 text-sm">{inq.name}</span>
-                                      {isUnread && (
-                                        <motion.span
-                                          animate={{ scale: [1, 1.07, 1] }}
-                                          transition={{ repeat: Infinity, duration: 1.5 }}
-                                          className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 border border-amber-200 rounded-md font-bold uppercase"
-                                        >NEW</motion.span>
-                                      )}
-                                      
-                                      {/* Status Badges */}
-                                      {inqStatus === "pending" && (
-                                        <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold bg-[#fef3c7] text-[#92400e]">
-                                          Pending
-                                        </span>
-                                      )}
-                                      {inqStatus === "contacted" && (
-                                        <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold bg-[#dbeafe] text-[#1e40af]">
-                                          Contacted
-                                        </span>
-                                      )}
-                                      {inqStatus === "done" && (
-                                        <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold bg-[#dcfce7] text-[#166534]">
-                                          Done
-                                        </span>
-                                      )}
-
-                                      <span className={`text-[9px] px-2 py-0.5 border rounded-md font-bold uppercase ${inq.context === "counselling"
-                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                        : "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                        }`}>{inq.context}</span>
-                                      <a href={`tel:${inq.phone}`} onClick={e => e.stopPropagation()}
-                                        className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-                                        <Phone size={10} /> {inq.phone}
-                                      </a>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-slate-400 text-[10px] font-mono shrink-0">
-                                      <span>{new Date(inq.timestamp).toLocaleString("en-IN")}</span>
-                                      {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                                    </div>
-                                  </div>
-
-                                  <div onClick={(e) => isExpanded && e.stopPropagation()}>
-                                    {!isExpanded ? (
-                                      <p className="text-xs text-slate-500 truncate max-w-2xl">{inq.message}</p>
-                                    ) : (
-                                      <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        className="space-y-3 pt-3 border-t border-slate-100"
-                                      >
-                                        <div className="flex flex-wrap gap-2">
-                                          {inq.email && (
-                                            <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 border border-blue-200 rounded-md font-bold">
-                                              <Mail size={10} /> {inq.email}
-                                            </span>
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="flex items-start gap-3">
+                                      <div className="w-10 h-10 rounded-2xl bg-[#14213D] text-[#C9A227] flex items-center justify-center font-bold text-sm shrink-0 shadow-inner">
+                                        {inq.name ? inq.name.charAt(0).toUpperCase() : "A"}
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <h4 className="font-bold text-sm text-slate-900 font-serif">{inq.name}</h4>
+                                          {isUnread && (
+                                            <span className="bg-rose-100 text-rose-700 text-[9px] font-bold font-mono px-2 py-0.5 rounded-full uppercase">NEW</span>
                                           )}
-                                          <span className={`text-[10px] px-2 py-0.5 rounded-md border font-bold ${inq.dispatchStatus === "Delivered" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                            inq.dispatchStatus === "Failed" ? "bg-rose-50 text-rose-700 border-rose-200" :
-                                              "bg-amber-50 text-amber-700 border-amber-200"
-                                            }`}>
-                                            Dispatch: {inq.dispatchStatus}
+                                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase ${
+                                            inq.formContext === "counselling" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
+                                          }`}>
+                                            {inq.formContext === "counselling" ? "Counselling" : "Admission"}
                                           </span>
-                                          {inq.dispatchedVia && (
-                                            <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 border border-slate-200 rounded-md font-bold">
-                                              via {inq.dispatchedVia}
-                                            </span>
-                                          )}
                                         </div>
-                                        <p className="text-xs text-slate-700 bg-slate-50 p-3 border-l-2 border-slate-300 rounded-lg font-sans leading-relaxed whitespace-pre-wrap">
-                                          {inq.message}
+                                        <p className="text-xs font-mono text-slate-500 mt-0.5 flex items-center gap-3 flex-wrap">
+                                          <span>📞 {inq.phone}</span>
+                                          {inq.email && <span>✉️ {inq.email}</span>}
+                                          <span>📅 {new Date(inq.timestamp).toLocaleString("en-IN")}</span>
                                         </p>
-                                        {inq.dispatchError && (
-                                          <div className="text-rose-700 bg-rose-50 border border-rose-200 p-2.5 rounded-lg text-[10px] font-mono break-all">
-                                            <strong>Dispatch Error:</strong> {inq.dispatchError}
-                                          </div>
-                                        )}
-                                        
-                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-3 border-t border-slate-100">
-                                          {/* Status Update Buttons */}
-                                          <div className="flex flex-wrap gap-1.5 items-center">
-                                            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold mr-1">Status:</span>
-                                            
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); handleUpdateStatus(inq.id, "pending"); }}
-                                              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                                                inqStatus === "pending"
-                                                  ? "bg-[#d97706] text-white border border-[#d97706]"
-                                                  : "bg-white text-[#d97706] border border-[#f59e0b]/40 hover:bg-amber-50"
-                                              }`}
-                                            >
-                                              Mark Pending
-                                            </button>
-                                            
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); handleUpdateStatus(inq.id, "contacted"); }}
-                                              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                                                inqStatus === "contacted"
-                                                  ? "bg-[#2563eb] text-white border border-[#2563eb]"
-                                                  : "bg-white text-[#2563eb] border border-[#3b82f6]/40 hover:bg-blue-50"
-                                              }`}
-                                            >
-                                              Mark Contacted
-                                            </button>
-                                            
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); handleUpdateStatus(inq.id, "done"); }}
-                                              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                                                inqStatus === "done"
-                                                  ? "bg-[#16a34a] text-white border border-[#16a34a]"
-                                                  : "bg-white text-[#16a34a] border border-[#22c55e]/40 hover:bg-green-50"
-                                              }`}
-                                            >
-                                              Mark Done
-                                            </button>
-                                          </div>
+                                      </div>
+                                    </div>
 
-                                          {/* Action Buttons */}
-                                          <div className="flex flex-wrap gap-2 sm:justify-end">
-                                            <a href={`tel:${inq.phone}`} onClick={e => e.stopPropagation()}
-                                              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
-                                              <Phone size={11} /> Call
-                                            </a>
-                                            {inq.email && (
-                                              <a href={`mailto:${inq.email}`} onClick={e => e.stopPropagation()}
-                                                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
-                                                <Mail size={11} /> Mail
-                                              </a>
-                                            )}
-                                            <a href={`https://api.whatsapp.com/send?phone=91${inq.phone.replace(/[^0-9]/g, "")}&text=` + encodeURIComponent(`Hello ${inq.name}, we received your inquiry for Ashish Memorial Public School...`)}
-                                              target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                                              className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
-                                              <MessageSquare size={11} /> WhatsApp
-                                            </a>
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteInquiry(inq.id); }}
-                                              className="flex items-center gap-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg cursor-pointer transition-all">
-                                              <Trash2 size={11} /> Delete
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </motion.div>
-                                    )}
+                                    {/* Action Buttons & Status */}
+                                    <div className="flex items-center gap-2 self-end sm:self-center">
+                                      <select
+                                        value={status}
+                                        onChange={(e) => handleUpdateInquiryStatus(inq.id, e.target.value)}
+                                        className={`text-xs font-bold font-mono rounded-xl px-2.5 py-1.5 border cursor-pointer focus:outline-none ${
+                                          status === "done" ? "bg-emerald-50 text-emerald-800 border-emerald-300" :
+                                          status === "contacted" ? "bg-blue-50 text-blue-800 border-blue-300" :
+                                          "bg-amber-50 text-amber-800 border-amber-300"
+                                        }`}
+                                      >
+                                        <option value="pending">🟡 Pending</option>
+                                        <option value="contacted">🔵 Contacted</option>
+                                        <option value="done">🟢 Done</option>
+                                      </select>
+
+                                      <button
+                                        onClick={() => toggleInquiryExpand(inq.id, inq.isRead)}
+                                        className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                                      >
+                                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleDeleteInquiry(inq.id)}
+                                        className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 cursor-pointer"
+                                        title="Move to trash"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
                                   </div>
-                                </motion.div>
+
+                                  {/* Expanded Inquiry Details */}
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: "auto" }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      className="mt-4 pt-3 border-t border-slate-100 text-xs space-y-3"
+                                    >
+                                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-slate-700 leading-relaxed font-light">
+                                        <strong>Student Message:</strong>
+                                        <p className="mt-1 font-mono text-slate-800 whitespace-pre-wrap">{inq.message || "No message payload provided."}</p>
+                                      </div>
+
+                                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-500">
+                                        <div className="flex items-center gap-2">
+                                          <span>Dispatch: <strong className="text-slate-800">{inq.dispatchStatus || "Pending"}</strong></span>
+                                          {inq.dispatchedVia && <span>via {inq.dispatchedVia}</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <a
+                                            href={`https://wa.me/${inq.phone.replace(/\D/g, "")}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="bg-emerald-600 text-white font-bold px-3 py-1 rounded-lg flex items-center gap-1 hover:bg-emerald-700"
+                                          >
+                                            <MessageSquare size={12} /> WhatsApp
+                                          </a>
+                                          <a
+                                            href={`tel:${inq.phone}`}
+                                            className="bg-indigo-600 text-white font-bold px-3 py-1 rounded-lg flex items-center gap-1 hover:bg-indigo-700"
+                                          >
+                                            <Phone size={12} /> Call
+                                          </a>
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     )}
 
-                    {/* ══ SETTINGS TAB ══════════════════════════════════════════ */}
-                    {adminActiveTab === "settings" && (
-                      adminRole !== "Superadmin" ? (
-                        <div className="flex items-start gap-4 bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-2xl max-w-lg">
-                          <ShieldAlert size={20} className="shrink-0 mt-0.5 text-rose-500" />
+                    {/* ══ 2. AUDIT LOG TAB ════════════════════════════════════════════ */}
+                    {adminActiveTab === "audit_log" && (
+                      <motion.div key="audit_log" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                           <div>
-                            <h4 className="font-bold text-base mb-1">Access Denied</h4>
-                            <p className="text-sm text-rose-700">Superadmin access is required to configure delivery engines and portal settings.</p>
+                            <h2 className="text-lg font-bold text-slate-900 font-serif flex items-center gap-2">
+                              <Activity size={20} className="text-indigo-600" /> Administrative Audit Trail
+                            </h2>
+                            <p className="text-xs text-slate-500 font-mono">System-wide authentication, user actions & inquiry management log ({auditLogList.length} entries)</p>
                           </div>
+                          <button onClick={() => loadAuditLogSilent()} className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer">
+                            <RefreshCw size={13} /> Refresh Log
+                          </button>
                         </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div>
-                            <h2 className="text-xl font-bold text-slate-900">Delivery Engines</h2>
-                            <p className="text-xs text-slate-500 mt-0.5">Control email routing and bypass blocked SMTP network environments.</p>
+
+                        {auditLogList.length === 0 ? (
+                          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center font-mono text-xs text-slate-400 shadow-sm">
+                            No audit log entries recorded yet.
                           </div>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Col 1 */}
-                            <div className="space-y-4">
-                              <div>
-                                <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Email Delivery Channel</label>
-                                <select value={adminSettings.emailProvider}
-                                  onChange={(e) => setAdminSettings({ ...adminSettings, emailProvider: e.target.value })}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all">
-                                  <option value="web3forms">Web3Forms Secure API (Recommended)</option>
-                                  <option value="brevo">Brevo Transactional API</option>
-                                  <option value="formsubmit">FormSubmit Tunnel</option>
-                                  <option value="smtp">Nodemailer SMTP Relay</option>
-                                </select>
-                                <p className="text-[10px] text-slate-400 mt-1.5">Web3Forms & Brevo bypass GCP Cloud Run port restrictions via HTTPS API.</p>
-                              </div>
+                        ) : (
+                          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs font-mono">
+                                <thead className="bg-[#14213D] text-slate-200 text-[10px] uppercase tracking-wider">
+                                  <tr>
+                                    <th className="px-4 py-3">Timestamp</th>
+                                    <th className="px-4 py-3">Event Action</th>
+                                    <th className="px-4 py-3">Performed By</th>
+                                    <th className="px-4 py-3">Target / Payload</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    {canRevokeAuditLog && <th className="px-4 py-3 text-right">Admin Controls</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {auditLogList.map((log: any) => {
+                                    const action = log.action;
+                                    const isRevoked = log.revoked === 1;
 
-                              {adminSettings.emailProvider === "web3forms" && (
-                                <div>
-                                  <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Web3Forms Access Key</label>
-                                  <input type="text" placeholder="Paste Web3Forms Key here..."
-                                    value={adminSettings.web3formsKey || ""}
-                                    onChange={(e) => setAdminSettings({ ...adminSettings, web3formsKey: e.target.value })}
-                                    className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" />
-                                  <div className="mt-2 bg-amber-50 border border-amber-200 p-3 rounded-xl text-[10px] text-amber-800 leading-relaxed">
-                                    💡 <strong>Free key in 5 secs:</strong> Go to <a href="https://web3forms.com/#start" target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-bold underline">web3forms.com</a>, enter your email <strong>{adminSettings.inquiryRecipient || "admin@example.com"}</strong>, and paste the key above.
-                                  </div>
-                                </div>
-                              )}
+                                    return (
+                                      <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                                          {new Date(log.timestamp).toLocaleString("en-IN")}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
+                                            action === "login_success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                            action === "login_failed" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                            action === "logout" ? "bg-slate-100 text-slate-700 border-slate-200" :
+                                            action === "inquiry_deleted" ? "bg-amber-50 text-amber-800 border-amber-200" :
+                                            action === "wipe_all" ? "bg-rose-100 text-rose-900 border-rose-300" :
+                                            action === "inquiry_restored" ? "bg-emerald-100 text-emerald-900 border-emerald-300" :
+                                            "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                          }`}>
+                                            {action}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3 font-bold text-slate-900">
+                                          {log.performed_by} <span className="text-[10px] text-slate-400 font-normal">({log.performed_by_role})</span>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
+                                          {log.target_id && <strong className="text-slate-900 font-bold">[{log.target_id}] </strong>}
+                                          <span className="text-slate-500">{log.target_data || "—"}</span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          {isRevoked ? (
+                                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold border border-slate-200 uppercase">
+                                              Revoked / Restored
+                                            </span>
+                                          ) : (
+                                            <span className="text-emerald-600 font-bold text-[10px]">Active Event</span>
+                                          )}
+                                        </td>
+                                        {canRevokeAuditLog && (
+                                          <td className="px-4 py-3 text-right space-x-2">
+                                            {action === "inquiry_deleted" && !isRevoked && (
+                                              <button
+                                                onClick={() => handleRevokeAuditLog(log.id)}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-sm"
+                                              >
+                                                Revoke & Restore
+                                              </button>
+                                            )}
+                                            {canEditAuditLog && (
+                                              <button
+                                                onClick={() => {
+                                                  setEditingAuditLogId(log.id);
+                                                  setEditingAuditLogData(log.target_data || "");
+                                                }}
+                                                className="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 cursor-pointer"
+                                                title="Edit payload string"
+                                              >
+                                                <Edit3 size={14} />
+                                              </button>
+                                            )}
+                                          </td>
+                                        )}
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
 
-                              <div>
-                                <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Recipient Notification Inbox</label>
-                                <input type="email" value={adminSettings.inquiryRecipient || ""}
-                                  onChange={(e) => setAdminSettings({ ...adminSettings, inquiryRecipient: e.target.value })}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" />
+                        {/* Edit Audit Payload Modal */}
+                        {editingAuditLogId && (
+                          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+                              <h3 className="text-sm font-bold text-slate-900 font-serif">Edit Audit Entry Payload #{editingAuditLogId}</h3>
+                              <textarea
+                                value={editingAuditLogData}
+                                onChange={(e) => setEditingAuditLogData(e.target.value)}
+                                rows={4}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button onClick={() => setEditingAuditLogId(null)} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">
+                                  Cancel
+                                </button>
+                                <button onClick={handleSaveAuditEdit} disabled={isSavingAuditEdit} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl">
+                                  {isSavingAuditEdit ? "Saving..." : "Save Payload"}
+                                </button>
                               </div>
                             </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
 
-                            {/* Col 2 */}
-                            <div className="space-y-4">
-                              <div>
-                                <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">School WhatsApp Phone</label>
-                                <input type="text" placeholder="919999999999"
-                                  value={adminSettings.whatsappPhone || ""}
-                                  onChange={(e) => setAdminSettings({ ...adminSettings, whatsappPhone: e.target.value })}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" />
-                                <p className="text-[10px] text-slate-400 mt-1.5">Country code + number, no "+" or spaces.</p>
-                              </div>
+                    {/* ══ 3. USERS TAB (Superadmin Only) ═════════════════════════════════ */}
+                    {adminActiveTab === "users" && (
+                      <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                          <h2 className="text-lg font-bold text-slate-900 font-serif flex items-center gap-2">
+                            <Users size={20} className="text-indigo-600" /> Admin User Accounts
+                          </h2>
+                          <p className="text-xs text-slate-500 font-mono mt-0.5">Manage portal administrators, reset passwords, or trigger impersonation sessions</p>
+                        </div>
 
-                              <div>
-                                <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Change Admin Security Key</label>
-                                <input type="text" value={adminSettings.adminPassword || ""}
-                                  onChange={(e) => setAdminSettings({ ...adminSettings, adminPassword: e.target.value })}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all" />
-                              </div>
+                        {/* Admin Users List Table */}
+                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                          <div className="divide-y divide-slate-100 font-mono text-xs">
+                            {adminUsersList.map(u => {
+                              const isSelf = u.username.toLowerCase() === adminUsername.toLowerCase();
+                              const isSuper = u.role === "Superadmin";
+                              const isResetOpen = !!showResetRow[u.username];
 
-                              {adminSettings.emailProvider === "brevo" && (
-                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                                  <p className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest">Brevo API Configuration</p>
-                                  <input type="password" placeholder="xkeysib-..." value={adminSettings.brevoApiKey || ""}
-                                    onChange={(e) => setAdminSettings({ ...adminSettings, brevoApiKey: e.target.value })}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
-                                  <input type="email" placeholder="sender@domain.com" value={adminSettings.brevoSenderEmail || ""}
-                                    onChange={(e) => setAdminSettings({ ...adminSettings, brevoSenderEmail: e.target.value })}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
-                                  <input type="text" placeholder="AMPS Portal" value={adminSettings.brevoSenderName || "AMPS Portal"}
-                                    onChange={(e) => setAdminSettings({ ...adminSettings, brevoSenderName: e.target.value })}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
-                                </div>
-                              )}
-
-                              {adminSettings.emailProvider === "smtp" && (
-                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
-                                  <p className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest">SMTP Relay Configuration</p>
-                                  <div className="grid grid-cols-3 gap-2">
-                                    <div className="col-span-2">
-                                      <input type="text" placeholder="smtp.gmail.com" value={adminSettings.smtpHost || ""}
-                                        onChange={(e) => setAdminSettings({ ...adminSettings, smtpHost: e.target.value })}
-                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
+                              return (
+                                <div key={u.username} className="p-4 space-y-3 hover:bg-slate-50/50 transition-colors">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-2xl bg-[#14213D] text-[#C9A227] flex items-center justify-center font-bold border border-slate-700 shadow-sm shrink-0">
+                                        {isSuper ? <Crown size={18} /> : <User size={18} />}
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-bold text-slate-900">{u.username}</span>
+                                          {isSelf && <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.5 rounded">YOU</span>}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 mt-0.5">Role: <strong className="text-slate-700">{u.role}</strong> · Registered: {new Date(u.created_at || Date.now()).toLocaleDateString("en-IN")}</p>
+                                      </div>
                                     </div>
-                                    <input type="text" placeholder="465" value={adminSettings.smtpPort || "465"}
-                                      onChange={(e) => setAdminSettings({ ...adminSettings, smtpPort: e.target.value })}
-                                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
+
+                                    {/* Row Buttons */}
+                                    <div className="flex items-center gap-2 self-end sm:self-center">
+                                      <button
+                                        onClick={() => setShowResetRow(prev => ({ ...prev, [u.username]: !prev[u.username] }))}
+                                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
+                                      >
+                                        Reset Password
+                                      </button>
+                                      {!isSelf && (
+                                        <button
+                                          onClick={() => handleImpersonate(u.username)}
+                                          disabled={isImpersonating[u.username]}
+                                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors shadow-sm flex items-center gap-1.5"
+                                        >
+                                          {isImpersonating[u.username] ? <Loader2 size={13} className="animate-spin" /> : <UserCheck size={13} />}
+                                          <span>Login As</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                  <input type="text" placeholder="email@domain.com" value={adminSettings.smtpUser || ""}
-                                    onChange={(e) => setAdminSettings({ ...adminSettings, smtpUser: e.target.value })}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
-                                  <input type="password" placeholder="Gmail App Password" value={adminSettings.smtpPass || ""}
-                                    onChange={(e) => setAdminSettings({ ...adminSettings, smtpPass: e.target.value })}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none" />
+
+                                  {/* Inline Reset Password Form */}
+                                  {isResetOpen && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="pt-2 border-t border-slate-100 flex items-center gap-3">
+                                      <input
+                                        type="password"
+                                        placeholder="Enter new password for user..."
+                                        value={userResetPasswords[u.username] || ""}
+                                        onChange={(e) => setUserResetPasswords({ ...userResetPasswords, [u.username]: e.target.value })}
+                                        className="flex-1 border border-slate-200 bg-slate-50 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                                      />
+                                      <button
+                                        onClick={() => handleResetUserPassword(u.username)}
+                                        disabled={isResettingPw[u.username]}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
+                                      >
+                                        {isResettingPw[u.username] ? "Saving..." : "Confirm Reset"}
+                                      </button>
+                                    </motion.div>
+                                  )}
                                 </div>
-                              )}
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* ══ 4. SETTINGS TAB (Superadmin Only) ═══════════════════════════════ */}
+                    {adminActiveTab === "settings" && (
+                      <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                          <h2 className="text-lg font-bold text-slate-900 font-serif">Delivery Engines & Settings</h2>
+                          <p className="text-xs text-slate-500 font-mono">Control email routing, API keys & WhatsApp configuration</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                            <div>
+                              <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Email Delivery Channel</label>
+                              <select
+                                value={adminSettings.emailProvider}
+                                onChange={(e) => setAdminSettings({ ...adminSettings, emailProvider: e.target.value })}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3 text-xs font-mono focus:outline-none"
+                              >
+                                <option value="web3forms">Web3Forms Secure API (Recommended)</option>
+                                <option value="brevo">Brevo Transactional API</option>
+                                <option value="formsubmit">FormSubmit Tunnel</option>
+                                <option value="smtp">Nodemailer SMTP Relay</option>
+                              </select>
+                            </div>
+
+                            {adminSettings.emailProvider === "web3forms" && (
+                              <div>
+                                <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Web3Forms Access Key</label>
+                                <input
+                                  type="text"
+                                  placeholder="Paste Web3Forms Key here..."
+                                  value={adminSettings.web3formsKey || ""}
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, web3formsKey: e.target.value })}
+                                  className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+                                />
+                              </div>
+                            )}
+
+                            <div>
+                              <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Recipient Notification Inbox</label>
+                              <input
+                                type="email"
+                                value={adminSettings.inquiryRecipient || ""}
+                                onChange={(e) => setAdminSettings({ ...adminSettings, inquiryRecipient: e.target.value })}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+                              />
                             </div>
                           </div>
 
-                          <div className="border-t border-slate-200 pt-5 flex flex-wrap gap-3">
-                            <button onClick={handleTestEmail}
-                              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-5 rounded-xl cursor-pointer transition-colors shadow-sm">
-                              <TestTube size={14} /> Test Email Delivery
-                            </button>
-                            <button onClick={handleSaveSettings}
-                              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-6 rounded-xl cursor-pointer transition-colors shadow-sm">
-                              <CheckCircle size={14} /> Save Settings
-                            </button>
+                          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                            <div>
+                              <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">School WhatsApp Phone</label>
+                              <input
+                                type="text"
+                                placeholder="919999999999"
+                                value={adminSettings.whatsappPhone || ""}
+                                onChange={(e) => setAdminSettings({ ...adminSettings, whatsappPhone: e.target.value })}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+                              />
+                            </div>
                           </div>
                         </div>
-                      )
+
+                        <div className="flex gap-3">
+                          <button onClick={handleTestEmail} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase px-5 py-3 rounded-xl cursor-pointer">
+                            Test Email
+                          </button>
+                          <button onClick={handleSaveSettings} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase px-6 py-3 rounded-xl cursor-pointer">
+                            Save Settings
+                          </button>
+                        </div>
+                      </motion.div>
                     )}
 
-                  </motion.div>
-                </AnimatePresence>
+                    {/* ══ 5. MY PROFILE TAB (All Roles) ══════════════════════════════════ */}
+                    {adminActiveTab === "my_profile" && (
+                      <motion.div key="my_profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+                        {/* Profile Info Header Card */}
+                        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-[#14213D] text-[#C9A227] flex items-center justify-center border-2 border-[#C9A227] shadow-inner font-bold text-lg">
+                              {adminUsername.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-base font-bold text-slate-900 font-serif">{adminUsername}</h3>
+                                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 uppercase">
+                                  {adminRole}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 font-mono mt-0.5">Active Admin Console Profile</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Password Change Form Card */}
+                        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm max-w-lg space-y-4">
+                          <h3 className="text-sm font-bold font-serif text-slate-900">Change Account Password</h3>
+                          
+                          <div>
+                            <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">Current Password</label>
+                            <div className="relative">
+                              <input
+                                type={showCurrentPw ? "text" : "password"}
+                                placeholder="Enter current password..."
+                                value={changePwCurrent}
+                                onChange={(e) => setChangePwCurrent(e.target.value)}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                              />
+                              <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                {showCurrentPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">New Password</label>
+                            <div className="relative">
+                              <input
+                                type={showNewPw ? "text" : "password"}
+                                placeholder="Enter new password..."
+                                value={changePwNew}
+                                onChange={(e) => setChangePwNew(e.target.value)}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                              />
+                              <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">Confirm New Password</label>
+                            <div className="relative">
+                              <input
+                                type={showConfirmPw ? "text" : "password"}
+                                placeholder="Confirm new password..."
+                                value={changePwConfirm}
+                                onChange={(e) => setChangePwConfirm(e.target.value)}
+                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                              />
+                              <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={handlePasswordChange}
+                            disabled={isChangingPassword}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase px-6 py-3 rounded-xl cursor-pointer shadow-sm flex items-center justify-center gap-2 w-full"
+                          >
+                            {isChangingPassword ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
+                            <span>Update Password</span>
+                          </button>
+                        </div>
+
+                        {/* Password History Table (Self) */}
+                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                          <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-bold font-mono text-slate-600 uppercase tracking-widest flex items-center gap-2">
+                              <History size={14} className="text-indigo-600" /> My Password Change History ({passwordHistory.length})
+                            </span>
+                            <button onClick={() => loadPasswordHistorySilent()} className="text-slate-400 hover:text-slate-600 transition-colors">
+                              <RefreshCw size={14} />
+                            </button>
+                          </div>
+
+                          {passwordHistory.length === 0 ? (
+                            <div className="p-8 text-center font-mono text-xs text-slate-400">
+                              No password change entries recorded yet.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs font-mono">
+                                <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase border-b border-slate-100">
+                                  <tr>
+                                    <th className="px-5 py-3">Timestamp</th>
+                                    <th className="px-5 py-3">User</th>
+                                    <th className="px-5 py-3">Changed By</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {passwordHistory.map((h: any) => (
+                                    <tr key={h.id || h.changed_at} className="hover:bg-slate-50/60">
+                                      <td className="px-5 py-3 text-slate-600">
+                                        {new Date(h.changed_at).toLocaleString("en-IN")}
+                                      </td>
+                                      <td className="px-5 py-3 font-bold text-slate-900">{h.username}</td>
+                                      <td className="px-5 py-3 text-indigo-600 font-bold">{h.changed_by}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Forgot Password Helper Modal */}
+          {showForgotPasswordModal && (
+            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 font-serif">Forgot Password</h3>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">Admin Account Password Recovery</p>
+                  </div>
+                  <button onClick={() => setShowForgotPasswordModal(false)} className="text-slate-400 hover:text-slate-600">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-900 leading-relaxed font-mono">
+                  💡 <strong>Password Recovery Instructions:</strong><br />
+                  Please contact the Primary <strong>Superadmin</strong> to trigger an instant password reset for your role from the Users tab.
+                </div>
+                <button
+                  onClick={() => setShowForgotPasswordModal(false)}
+                  className="w-full bg-[#14213D] text-white font-bold text-xs uppercase tracking-wider py-3 rounded-xl"
+                >
+                  Close
+                </button>
               </div>
             </div>
           )}

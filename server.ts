@@ -4,7 +4,8 @@ import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 declare global {
@@ -14,6 +15,11 @@ declare global {
         username: string;
         role: string;
       };
+      adminUser?: {
+        username: string;
+        role: string;
+        impersonatedBy?: string | null;
+      };
     }
   }
 }
@@ -22,218 +28,239 @@ declare global {
 dotenv.config();
 
 /**
- * AMPS School Portal - Email Dispatcher & Server Configuration
- * 
- * RECOMMENDED PRODUCTION CONFIGURATION (e.g. Render / GCP Cloud Run):
- * Configure these environment variables in your hosting provider's dashboard FIRST:
- *   - EMAIL_PROVIDER="brevo" (or "web3forms", "formsubmit", "smtp")
- *   - BREVO_API_KEY="xkeysib-..."
- *   - BREVO_SENDER_EMAIL="verified-sender@domain.com" (Must be a verified sender email in Brevo under Senders)
- *   - BREVO_SENDER_NAME="AMPS Portal"
- *   - INQUIRY_RECIPIENT_EMAIL="admin@example.com"
- * 
- * Environment variables take precedence over settings stored in SQLite / settings.json,
- * which reset on Render redeploys/restarts due to ephemeral filesystem storage.
+ * AMPS School Portal - Server & Turso DB Configuration
  */
 
-// Initialize SQLite database (supports Render persistent disk via DB_PATH)
-const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "school.db");
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-const db = new Database(DB_PATH);
+const rawTursoUrl = process.env.TURSO_DATABASE_URL?.trim().replace(/^["']|["']$/g, "");
+const rawTursoToken = process.env.TURSO_AUTH_TOKEN?.trim().replace(/^["']|["']$/g, "");
 
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS settings (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    settings_json TEXT NOT NULL
+console.log("[DB] Connecting to Turso database...");
+if (!rawTursoUrl) {
+  console.warn(
+    "[DB WARNING] TURSO_DATABASE_URL not set — using local file:school.db which will reset on Render restarts. Set TURSO_DATABASE_URL in environment variables for persistence."
   );
-  
-  CREATE TABLE IF NOT EXISTS inquiries (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    email TEXT,
-    message TEXT,
-    timestamp TEXT NOT NULL,
-    dispatchedVia TEXT,
-    dispatchStatus TEXT,
-    dispatchError TEXT,
-    isRead INTEGER DEFAULT 0,
-    context TEXT DEFAULT 'admission',
-    status TEXT DEFAULT 'pending'
-  );
-
-  CREATE TABLE IF NOT EXISTS otps (
-    email TEXT PRIMARY KEY,
-    code TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS email_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS admin_sessions (
-    token TEXT PRIMARY KEY,
-    username TEXT NOT NULL,
-    role TEXT NOT NULL,
-    createdAt INTEGER,
-    lastActivity INTEGER,
-    expiresAt INTEGER
-  );
-`);
-
-// Safe migration: Add columns to inquiries table if they do not exist
-try {
-  db.exec("ALTER TABLE inquiries ADD COLUMN isRead INTEGER DEFAULT 0");
-  console.log("[DB Migration] Added column isRead to inquiries table.");
-} catch (e: any) {
-  if (!e.message.includes("duplicate column name")) {
-    console.error("[DB Migration Error] isRead:", e.message);
-  }
+} else {
+  console.log(`[DB] Using TURSO_DATABASE_URL: ${rawTursoUrl}`);
 }
 
-try {
-  db.exec("ALTER TABLE inquiries ADD COLUMN context TEXT DEFAULT 'admission'");
-  console.log("[DB Migration] Added column context to inquiries table.");
-} catch (e: any) {
-  if (!e.message.includes("duplicate column name")) {
-    console.error("[DB Migration Error] context:", e.message);
-  }
-}
-
-try {
-  db.exec("ALTER TABLE inquiries ADD COLUMN status TEXT DEFAULT 'pending'");
-  console.log("[DB Migration] Added column status to inquiries table.");
-} catch (e: any) {
-  if (!e.message.includes("duplicate column name")) {
-    console.error("[DB Migration Error] status:", e.message);
-  }
-}
-
-// Backfill context for existing inquiries to resolve defaulted/incorrect values
-try {
-  const rows = db.prepare("SELECT id, message, context FROM inquiries WHERE context IS NULL OR context = '' OR context = 'admission'").all() as { id: string; message: string; context: string }[];
-  if (rows.length > 0) {
-    const updateStmt = db.prepare("UPDATE inquiries SET context = ? WHERE id = ?");
-    let backfilledCount = 0;
-    db.transaction(() => {
-      for (const row of rows) {
-        const isCounselling = typeof row.message === "string" && (
-          row.message.toLowerCase().includes("counselling") || 
-          row.message.toLowerCase().includes("stream selection")
-        );
-        const resolvedContext = isCounselling ? "counselling" : "admission";
-        if (row.context !== resolvedContext || !row.context) {
-          updateStmt.run(resolvedContext, row.id);
-          backfilledCount++;
-        }
-      }
-    })();
-    if (backfilledCount > 0) {
-      console.log(`[Migration] Backfilled context for ${backfilledCount} existing inquiries.`);
-    }
-  }
-} catch (err: any) {
-  console.error("[DB Migration Error] Backfilling context failed:", err.message);
-}
-
-// Stateless Admin Credentials resolved from Environment Variables
-const ADMIN_CREDENTIALS: Record<string, { password: string; role: string }> = {
-  superadmin: { password: process.env.SUPERADMIN_PASSWORD || "ampssuperadmin", role: "Superadmin" },
-  chairman: { password: process.env.CHAIRMAN_PASSWORD || "ampsadmin", role: "Chairman" },
-  administrator: { password: process.env.ADMIN_PASSWORD || "ampsadmin", role: "Administrator" },
-  principal: { password: process.env.PRINCIPAL_PASSWORD || "ampsadmin", role: "Principal" },
-};
+const db = createClient({
+  url: rawTursoUrl || "file:school.db",
+  authToken: rawTursoToken,
+});
 
 // Default Configuration Settings
 const DEFAULT_SETTINGS = {
   adminPassword: "ampsadmin",
-  whatsappPhone: "919999999999", // Default WhatsApp phone number placeholder
-  emailProvider: "formsubmit",   // Default to formsubmit for zero-config out of the box activation
-  web3formsKey: "",             // Web3Forms free Access Key
+  whatsappPhone: "919999999999",
+  emailProvider: "formsubmit",
+  web3formsKey: "",
   smtpHost: "",
   smtpPort: "465",
   smtpUser: "",
   smtpPass: "",
   inquiryRecipient: "admin@example.com",
-  brevoApiKey: "",              // Brevo API Key
-  brevoSenderEmail: "",         // Verified sender email in Brevo
-  brevoSenderName: "AMPS Portal" // Sender name
+  brevoApiKey: "",
+  brevoSenderEmail: "",
+  brevoSenderName: "AMPS Portal"
 };
 
-// Migration from flat JSON files to SQLite
-try {
-  const SETTINGS_JSON_PATH = path.join(process.cwd(), "settings.json");
-  const INQUIRIES_JSON_PATH = path.join(process.cwd(), "inquiries.json");
+// Audit Log Helper
+async function recordAuditLog(
+  action: string,
+  performedBy: string,
+  performedByRole: string,
+  targetId?: string,
+  targetData?: string
+) {
+  try {
+    const timestamp = new Date().toISOString();
+    await db.execute({
+      sql: `INSERT INTO audit_log (action, performed_by, performed_by_role, target_id, target_data, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [action, performedBy, performedByRole, targetId || null, targetData || null, timestamp]
+    });
 
-  // Migrate Settings
-  const settingsCount = db.prepare("SELECT COUNT(*) as count FROM settings").get() as { count: number };
-  if (settingsCount.count === 0 && fs.existsSync(SETTINGS_JSON_PATH)) {
-    console.log("[Migration] Migrating settings.json to SQLite database...");
-    const rawData = fs.readFileSync(SETTINGS_JSON_PATH, "utf-8");
-    db.prepare("INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)").run(rawData);
-    fs.renameSync(SETTINGS_JSON_PATH, SETTINGS_JSON_PATH + ".bak");
-    console.log("[Migration] settings.json migrated and backed up.");
-  }
-
-  // Migrate Inquiries
-  const inquiriesCount = db.prepare("SELECT COUNT(*) as count FROM inquiries").get() as { count: number };
-  if (inquiriesCount.count === 0 && fs.existsSync(INQUIRIES_JSON_PATH)) {
-    console.log("[Migration] Migrating inquiries.json to SQLite database...");
-    const rawData = fs.readFileSync(INQUIRIES_JSON_PATH, "utf-8");
-    const list = JSON.parse(rawData);
-    if (Array.isArray(list)) {
-      const insertStmt = db.prepare(`
-        INSERT OR REPLACE INTO inquiries (
-          id, name, phone, email, message, timestamp, dispatchedVia, dispatchStatus, dispatchError
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      db.transaction(() => {
-        for (const inq of list) {
-          insertStmt.run(
-            inq.id,
-            inq.name,
-            inq.phone,
-            inq.email || "",
-            inq.message || "",
-            inq.timestamp,
-            inq.dispatchedVia || "",
-            inq.dispatchStatus || "",
-            inq.dispatchError || ""
-          );
-        }
-      })();
-      fs.renameSync(INQUIRIES_JSON_PATH, INQUIRIES_JSON_PATH + ".bak");
-      console.log(`[Migration] ${list.length} inquiries migrated and inquiries.json backed up.`);
+    if (process.env.NODE_ENV !== "production") {
+      const logFile = path.join(process.cwd(), "active-admin-credentials.local.txt");
+      const logLine = `[${timestamp}] ${action.toUpperCase()} — Performed by: ${performedBy} (${performedByRole}) ${
+        targetId ? `| Target: ${targetId}` : ""
+      }\n`;
+      fs.appendFileSync(logFile, logLine, "utf-8");
     }
+  } catch (err: any) {
+    console.error("[Audit Log Error]:", err.message);
   }
-} catch (err) {
-  console.error("[Migration] Error migrating JSON to SQLite:", err);
 }
 
-// Helper: Read Settings from DB
-function readSettings() {
+// Database Schema Initialization & Seeding
+async function initializeDatabase() {
   try {
-    const row = db.prepare("SELECT settings_json FROM settings WHERE id = 1").get() as { settings_json: string } | undefined;
-    if (row && row.settings_json) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(row.settings_json) };
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        role TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        created_by TEXT DEFAULT 'system'
+      )
+    `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS password_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        changed_at TEXT DEFAULT (datetime('now')),
+        changed_by TEXT NOT NULL
+      )
+    `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        token TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        role TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT NOT NULL,
+        impersonated_by TEXT DEFAULT NULL
+      )
+    `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        performed_by TEXT NOT NULL,
+        performed_by_role TEXT NOT NULL,
+        target_id TEXT,
+        target_data TEXT,
+        timestamp TEXT DEFAULT (datetime('now')),
+        revoked INTEGER DEFAULT 0,
+        revoked_by TEXT DEFAULT NULL,
+        revoked_at TEXT DEFAULT NULL
+      )
+    `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS inquiries (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT,
+        message TEXT,
+        formContext TEXT DEFAULT 'admission',
+        timestamp TEXT DEFAULT (datetime('now')),
+        isRead INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        dispatchStatus TEXT DEFAULT 'Pending',
+        dispatchedVia TEXT,
+        dispatchError TEXT,
+        deleted INTEGER DEFAULT 0,
+        deleted_by TEXT DEFAULT NULL,
+        deleted_at TEXT DEFAULT NULL
+      )
+    `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `);
+
+    try {
+      await db.execute("ALTER TABLE settings ADD COLUMN key TEXT");
+      await db.execute("ALTER TABLE settings ADD COLUMN value TEXT");
+    } catch (e) {
+      // Columns already exist
+    }
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS otps (
+        email TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      )
+    `);
+
+    console.log("[DB] Tables initialized");
+
+    // Seed default admin users and ensure password_hash column exists
+    try {
+      await db.execute("ALTER TABLE admin_users ADD COLUMN password_hash TEXT");
+    } catch (e) {
+      // Column already exists
+    }
+
+    const defaults = [
+      { username: "superadmin", role: "Superadmin", password: process.env.SUPERADMIN_PASSWORD || "ampssuperadmin" },
+      { username: "chairman", role: "Chairman", password: process.env.CHAIRMAN_PASSWORD || "ampschairman" },
+      { username: "administrator", role: "Administrator", password: process.env.ADMIN_PASSWORD || "ampsadmin" },
+      { username: "principal", role: "Principal", password: process.env.PRINCIPAL_PASSWORD || "ampsprincipal" }
+    ];
+
+    for (const u of defaults) {
+      const existing = await db.execute({
+        sql: "SELECT * FROM admin_users WHERE LOWER(username) = ?",
+        args: [u.username.toLowerCase()]
+      });
+      const row = existing.rows[0] as any;
+      if (!row) {
+        const hash = await bcrypt.hash(u.password, 12);
+        await db.execute({
+          sql: "INSERT INTO admin_users (username, role, password_hash, created_at, created_by) VALUES (?, ?, ?, datetime('now'), 'system')",
+          args: [u.username, u.role, hash]
+        });
+        await db.execute({
+          sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), 'System Initializer')",
+          args: [u.username]
+        });
+      } else if (!row.password_hash || !String(row.password_hash).startsWith("$2")) {
+        const hash = await bcrypt.hash(u.password, 12);
+        await db.execute({
+          sql: "UPDATE admin_users SET password_hash = ?, role = ? WHERE LOWER(username) = ?",
+          args: [hash, u.role, u.username.toLowerCase()]
+        });
+      }
+    }
+
+    console.log("[DB] Admin users seeded successfully: superadmin, chairman, administrator, principal");
+  } catch (err: any) {
+    console.error("[DB Init Error]:", err.message);
+  }
+}
+
+// Settings Helpers
+async function readSettings() {
+  try {
+    const res = await db.execute("SELECT value FROM settings WHERE key = 'settings_json'");
+    if (res.rows[0]?.value) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(String(res.rows[0].value)) };
     }
   } catch (err) {
-    console.error("[DB] Error reading settings from SQLite, using defaults:", err);
+    try {
+      const resLegacy = await db.execute("SELECT settings_json FROM settings WHERE id = 1");
+      if (resLegacy.rows[0]?.settings_json) {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(String(resLegacy.rows[0].settings_json)) };
+      }
+    } catch (e) {
+      // Fallthrough to defaults
+    }
   }
   return { ...DEFAULT_SETTINGS };
 }
 
-// Helper: Get Resolved Configuration (Environment Variables take precedence over SQLite/JSON)
-function getResolvedConfig() {
-  const dbSettings = readSettings();
+async function getResolvedConfig() {
+  const dbSettings = await readSettings();
   return {
     ...dbSettings,
     adminPassword: process.env.ADMIN_PASSWORD || dbSettings.adminPassword || "ampsadmin",
@@ -251,109 +278,76 @@ function getResolvedConfig() {
   };
 }
 
-// Helper: Save Settings
-function saveSettings(settings: any) {
+async function saveSettings(settings: any) {
   try {
     const jsonStr = JSON.stringify(settings);
-    db.prepare("INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)").run(jsonStr);
+    try {
+      await db.execute({
+        sql: "INSERT OR REPLACE INTO settings (key, value) VALUES ('settings_json', ?)",
+        args: [jsonStr]
+      });
+    } catch (e) {
+      await db.execute({
+        sql: "INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)",
+        args: [jsonStr]
+      });
+    }
     return true;
   } catch (err) {
-    console.error("[DB] Error writing settings to SQLite:", err);
+    console.error("[DB Save Settings Error]:", err);
     return false;
   }
 }
 
-// Helper: Read Inquiries
-function readInquiries() {
-  try {
-    const rows = db.prepare("SELECT * FROM inquiries ORDER BY timestamp ASC").all();
-    return rows;
-  } catch (err) {
-    console.error("[DB] Error reading inquiries from SQLite, returning empty list:", err);
-  }
-  return [];
-}
-
-// Helper: Save Inquiries
-function saveInquiries(inquiries: any[]) {
-  try {
-    const deleteStmt = db.prepare("DELETE FROM inquiries");
-    const insertStmt = db.prepare(`
-      INSERT OR REPLACE INTO inquiries (
-        id, name, phone, email, message, timestamp, dispatchedVia, dispatchStatus, dispatchError, isRead, context, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    db.transaction((list: any[]) => {
-      deleteStmt.run();
-      for (const inq of list) {
-        insertStmt.run(
-          inq.id,
-          inq.name,
-          inq.phone,
-          inq.email || "",
-          inq.message || "",
-          inq.timestamp,
-          inq.dispatchedVia || "",
-          inq.dispatchStatus || "",
-          inq.dispatchError || "",
-          inq.isRead !== undefined ? inq.isRead : 0,
-          inq.context || "admission",
-          inq.status || "pending"
-        );
-      }
-    })(inquiries);
-
-    return true;
-  } catch (err) {
-    console.error("[DB] Error saving inquiries to SQLite:", err);
-    return false;
-  }
-}
-
-function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+// Authentication Middleware
+async function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  let token = "";
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  }
+
+  if (!token) {
     return res.status(401).json({ success: false, message: "Unauthorized. Missing token." });
   }
 
-  const token = authHeader.split(" ")[1];
   try {
-    const session = db.prepare("SELECT username, role, expiresAt, lastActivity FROM admin_sessions WHERE token = ?").get(token) as {
-      username: string;
-      role: string;
-      expiresAt: number;
-      lastActivity: number;
-    } | undefined;
+    const resSession = await db.execute({
+      sql: "SELECT * FROM admin_sessions WHERE token = ?",
+      args: [token]
+    });
+    const session = resSession.rows[0] as any;
 
     if (!session) {
       return res.status(401).json({ success: false, message: "Unauthorized. Invalid session." });
     }
 
-    const now = Date.now();
-    // Check if session has expired or if inactive for > 20 mins (1,200,000 ms)
-    if (now > session.expiresAt || (now - session.lastActivity) > 20 * 60 * 1000) {
-      db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
+    const nowIso = new Date().toISOString();
+    if (session.expires_at && String(session.expires_at) < nowIso) {
+      await db.execute({ sql: "DELETE FROM admin_sessions WHERE token = ?", args: [token] });
       return res.status(401).json({ success: false, message: "Session expired. Please log in again." });
     }
 
-    // Sliding renewal
-    const newExpiresAt = now + 20 * 60 * 1000;
-    db.prepare("UPDATE admin_sessions SET lastActivity = ?, expiresAt = ? WHERE token = ?").run(now, newExpiresAt, token);
+    req.adminUser = {
+      username: String(session.username),
+      role: String(session.role),
+      impersonatedBy: session.impersonated_by ? String(session.impersonated_by) : null
+    };
 
     req.admin = {
-      username: session.username,
-      role: session.role
+      username: req.adminUser.username,
+      role: req.adminUser.role
     };
+
     next();
   } catch (err: any) {
-    console.error("[Auth Error] Session validation failed:", err.message);
+    console.error("[Auth Middleware Error]:", err.message);
     res.status(500).json({ success: false, message: "Authentication database error." });
   }
 }
 
 function requireSuperAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (req.admin?.role !== "Superadmin") {
+  if (req.adminUser?.role !== "Superadmin") {
     return res.status(403).json({ success: false, message: "Superadmin access required." });
   }
   next();
@@ -363,7 +357,6 @@ interface LoginAttempt {
   failedCount: number;
   blockUntil: number;
 }
-
 const loginAttempts: Record<string, LoginAttempt> = {};
 
 function rateLimitLogin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -390,1115 +383,700 @@ function recordFailedLogin(ip: string) {
   const attempt = loginAttempts[ip];
   attempt.failedCount += 1;
   if (attempt.failedCount >= 5) {
-    attempt.blockUntil = now + 15 * 60 * 1000; // 15 mins block
-    attempt.failedCount = 0; // reset counter
+    attempt.blockUntil = now + 15 * 60 * 1000;
+    attempt.failedCount = 0;
   }
 }
 
+// Email Delivery Engine
+async function sendInquiryEmail(inquiryData: { name: string; phone: string; email: string; message: string; context?: string }) {
+  const config = await getResolvedConfig();
+  const provider = config.emailProvider;
+  const recipient = config.inquiryRecipient || "admin@example.com";
+  const contextLabel = inquiryData.context === "counselling" ? "Stream Counselling Request" : "Admission Inquiry";
 
-function cleanExpiredSessions() {
-  try {
-    const result = db.prepare("DELETE FROM admin_sessions WHERE expiresAt < ?").run(Date.now());
-    if (result.changes > 0) {
-      console.log(`[Security] Cleaned up ${result.changes} expired admin sessions.`);
+  console.log(`[Email Dispatch] Sending via '${provider}' to '${recipient}' for context '${contextLabel}'`);
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; rounded: 12px;">
+      <h2 style="color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">AMPS Portal - New ${contextLabel}</h2>
+      <p><strong>Context:</strong> <span style="background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-weight: bold;">${contextLabel}</span></p>
+      <p><strong>Name:</strong> ${inquiryData.name}</p>
+      <p><strong>Phone:</strong> ${inquiryData.phone}</p>
+      <p><strong>Email:</strong> ${inquiryData.email || 'N/A'}</p>
+      <p><strong>Message:</strong></p>
+      <blockquote style="background: #f8fafc; padding: 12px; border-left: 4px solid #3b82f6; margin: 0;">
+        ${inquiryData.message || 'No additional details provided.'}
+      </blockquote>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin-top: 20px;" />
+      <p style="font-size: 11px; color: #64748b;">This inquiry was captured automatically by Ashish Memorial Public School Portal.</p>
+    </div>
+  `;
+
+  if (provider === "web3forms" && config.web3formsKey) {
+    try {
+      const response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_key: config.web3formsKey,
+          subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+          from_name: "AMPS School Portal",
+          to: recipient,
+          name: inquiryData.name,
+          phone: inquiryData.phone,
+          email: inquiryData.email,
+          message: `${contextLabel}: ${inquiryData.message}`
+        })
+      });
+      const data = await response.json();
+      if (data.success) return { success: true, via: "Web3Forms API" };
+      throw new Error(data.message || "Web3Forms API error");
+    } catch (err: any) {
+      return { success: false, via: "Web3Forms API", error: err.message };
     }
+  }
+
+  if (provider === "brevo" && config.brevoApiKey) {
+    try {
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": config.brevoApiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          sender: {
+            name: config.brevoSenderName || "AMPS Portal",
+            email: config.brevoSenderEmail || recipient
+          },
+          to: [{ email: recipient }],
+          subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+          htmlContent: htmlBody
+        })
+      });
+      if (response.ok) return { success: true, via: "Brevo Transactional API" };
+      const errText = await response.text();
+      throw new Error(`Brevo API status ${response.status}: ${errText}`);
+    } catch (err: any) {
+      return { success: false, via: "Brevo API", error: err.message };
+    }
+  }
+
+  if (provider === "smtp" && config.smtpHost) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: config.smtpHost,
+        port: parseInt(config.smtpPort || "465", 10),
+        secure: config.smtpPort === "465",
+        auth: {
+          user: config.smtpUser,
+          pass: config.smtpPass
+        }
+      });
+      await transporter.sendMail({
+        from: `"AMPS School Portal" <${config.smtpUser || recipient}>`,
+        to: recipient,
+        subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+        html: htmlBody
+      });
+      return { success: true, via: "Nodemailer SMTP" };
+    } catch (err: any) {
+      return { success: false, via: "Nodemailer SMTP", error: err.message };
+    }
+  }
+
+  // Fallback to FormSubmit tunnel
+  try {
+    const response = await fetch(`https://formsubmit.co/ajax/${recipient}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        _subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+        _template: "table",
+        Name: inquiryData.name,
+        Phone: inquiryData.phone,
+        Email: inquiryData.email,
+        Context: contextLabel,
+        Message: inquiryData.message
+      })
+    });
+    const data = await response.json();
+    if (data.success === "true" || response.ok) return { success: true, via: "FormSubmit Tunnel" };
+    throw new Error(data.message || "FormSubmit tunnel fallback failed");
   } catch (err: any) {
-    console.error("[Security Error] Session cleanup failed:", err.message);
+    return { success: false, via: "FormSubmit Tunnel", error: err.message };
   }
 }
 
+// Server Entry Point
 async function startServer() {
+  await initializeDatabase();
+
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // Startup Validation Check for Brevo Configuration
-  const bootConfig = getResolvedConfig();
-  console.log(`[Config] Server booting. Selected Email Provider: '${bootConfig.emailProvider}'`);
-  if (bootConfig.emailProvider === "brevo") {
-    if (!bootConfig.brevoApiKey) {
-      console.warn("[Config Warning] Brevo is selected as email provider, but BREVO_API_KEY is not set.");
-    }
-    if (!bootConfig.brevoSenderEmail) {
-      console.warn("[Config Warning] Brevo is selected as email provider, but BREVO_SENDER_EMAIL is not set.");
-    }
-  }
+  const bootConfig = await getResolvedConfig();
+  console.log(`[Config] Server booted. Selected Email Provider: '${bootConfig.emailProvider}'`);
 
-  // Session Cleanup startup and interval
-  cleanExpiredSessions();
-  setInterval(cleanExpiredSessions, 60 * 60 * 1000);
-
-  // Middleware to parse JSON
   app.use(express.json());
 
-  // Serve uploaded images from public/assets/ — registered first so images always load
-  app.use("/assets", express.static(path.join(process.cwd(), "public", "assets")));
-
-  // 1. API: Health Check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
-
-  // 2. API: Get Settings
-  app.get("/api/admin/settings", requireAdminAuth, requireSuperAdmin, (req, res) => {
-    const settings = getResolvedConfig();
-    res.json({ success: true, settings });
-  });
-
-  // 3. API: Save Settings
-  app.post("/api/admin/settings", requireAdminAuth, requireSuperAdmin, (req, res) => {
-    const { settings } = req.body;
-    const currentSettings = readSettings();
-
-    const updated = { ...currentSettings, ...settings };
-    if (saveSettings(updated)) {
-      res.json({ success: true, message: "Settings saved successfully.", settings: getResolvedConfig() });
-    } else {
-      res.status(500).json({ success: false, message: "Failed to persist settings." });
-    }
-  });
-
-  // 4. API: Get Inquiries (Admin Panel)
-  app.post("/api/admin/inquiries", requireAdminAuth, (req, res) => {
-    const inquiries = readInquiries();
-    res.json({ success: true, inquiries });
-  });
-
-  // 5. API: Delete/Clear Inquiries
-  app.post("/api/admin/clear-inquiries", requireAdminAuth, (req, res) => {
-    const { id } = req.body;
-    if (!id && req.admin?.role !== "Superadmin") {
-      return res.status(403).json({ success: false, message: "Superadmin access required for full database wipe." });
-    }
-    let inquiries = readInquiries();
-    if (id) {
-      inquiries = inquiries.filter((inq: any) => inq.id !== id);
-    } else {
-      inquiries = [];
-    }
-
-    if (saveInquiries(inquiries)) {
-      res.json({ success: true, message: id ? "Inquiry deleted." : "All inquiries cleared.", inquiries });
-    } else {
-      res.status(500).json({ success: false, message: "Failed to update inquiries database." });
-    }
-  });
-
-  // 5.1 API: Mark Inquiry as Read
-  app.post("/api/admin/mark-read", requireAdminAuth, (req, res) => {
-    const { id } = req.body;
-    if (!id) {
-      return res.status(400).json({ success: false, message: "ID is required." });
-    }
-
+  // ─── PUBLIC INQUIRY API ──────────────────────────────────────────────────
+  app.post("/api/inquiries", async (req, res) => {
     try {
-      const result = db.prepare("UPDATE inquiries SET isRead = 1 WHERE id = ?").run(id);
-      if (result.changes > 0) {
-        res.json({ success: true, message: "Inquiry marked as read." });
-      } else {
-        res.status(404).json({ success: false, message: "Inquiry not found." });
-      }
-    } catch (err: any) {
-      console.error("[DB Error] Failed to mark inquiry as read:", err.message);
-      res.status(500).json({ success: false, message: "Database error." });
-    }
-  });
-
-  // 5.1.1 API: Update Inquiry Status
-  app.post("/api/admin/update-status", requireAdminAuth, (req, res) => {
-    const { inquiryId, status } = req.body;
-    if (!inquiryId || !status) {
-      return res.status(400).json({ success: false, message: "inquiryId and status are required." });
-    }
-    const validStatuses = ["pending", "contacted", "done"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid status value." });
-    }
-
-    try {
-      const result = db.prepare("UPDATE inquiries SET status = ? WHERE id = ?").run(status, inquiryId);
-      if (result.changes > 0) {
-        res.json({ success: true, message: `Inquiry status updated to ${status}.` });
-      } else {
-        res.status(404).json({ success: false, message: "Inquiry not found." });
-      }
-    } catch (err: any) {
-      console.error("[DB Error] Failed to update inquiry status:", err.message);
-      res.status(500).json({ success: false, message: "Database error." });
-    }
-  });
-
-  // 5.2 API: Analytics Dashboard
-  app.post("/api/admin/analytics", requireAdminAuth, (req, res) => {
-
-    try {
-      // 1. Overall stats
-      const stats = db.prepare(`
-        SELECT 
-          (SELECT COUNT(*) FROM inquiries) as totalInquiries,
-          (SELECT COUNT(*) FROM inquiries WHERE isRead = 0) as unreadCount,
-          (SELECT COUNT(*) FROM inquiries WHERE date(timestamp) >= date('now', '-6 days')) as last7Days,
-          (SELECT COUNT(*) FROM inquiries WHERE date(timestamp) >= date('now', '-29 days')) as last30Days
-      `).get() as { totalInquiries: number; unreadCount: number; last7Days: number; last30Days: number };
-
-      // 2. By context
-      const contextRows = db.prepare(`
-        SELECT context, COUNT(*) as count 
-        FROM inquiries 
-        GROUP BY context
-      `).all() as { context: string; count: number }[];
-
-      const byContext = { admission: 0, counselling: 0 };
-      for (const r of contextRows) {
-        if (r.context === "counselling") {
-          byContext.counselling = r.count;
-        } else {
-          byContext.admission += r.count;
-        }
+      const { name, phone, email, message, context } = req.body;
+      if (!name || !phone) {
+        return res.status(400).json({ success: false, message: "Name and phone number are required." });
       }
 
-      // 3. By dispatch status
-      const statusRows = db.prepare(`
-        SELECT dispatchStatus, COUNT(*) as count 
-        FROM inquiries 
-        GROUP BY dispatchStatus
-      `).all() as { dispatchStatus: string; count: number }[];
-
-      const byDispatchStatus: { [status: string]: number } = {};
-      for (const r of statusRows) {
-        const s = r.dispatchStatus || "Unknown";
-        byDispatchStatus[s] = r.count;
+      const cleanPhone = String(phone).replace(/\D/g, "");
+      if (cleanPhone.length < 10) {
+        return res.status(400).json({ success: false, message: "Please enter a valid 10-digit mobile number." });
       }
 
-      // 4. Daily counts for the last 30 days (0-filled)
-      const dailyCounts: { date: string; count: number }[] = [];
-      const dateToCountMap = new Map<string, number>();
+      const id = Date.now().toString() + "-" + Math.random().toString(36).substr(2, 4);
+      const timestamp = new Date().toISOString();
+      const inqContext = context === "counselling" ? "counselling" : "admission";
 
-      const dailyRows = db.prepare(`
-        SELECT date(timestamp) as date_day, COUNT(*) as count 
-        FROM inquiries 
-        WHERE date(timestamp) >= date('now', '-29 days') 
-        GROUP BY date_day
-      `).all() as { date_day: string; count: number }[];
+      const dispatchRes = await sendInquiryEmail({ name, phone, email: email || "", message: message || "", context: inqContext });
 
-      for (const r of dailyRows) {
-        if (r.date_day) {
-          dateToCountMap.set(r.date_day, r.count);
-        }
-      }
+      await db.execute({
+        sql: `INSERT INTO inquiries (
+                id, name, phone, email, message, formContext, timestamp, isRead, status, dispatchStatus, dispatchedVia, dispatchError, deleted
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?, ?, ?, 0)`,
+        args: [
+          id,
+          name,
+          phone,
+          email || "",
+          message || "",
+          inqContext,
+          timestamp,
+          dispatchRes.success ? "Sent" : "Failed",
+          dispatchRes.via,
+          dispatchRes.error || null
+        ]
+      });
 
-      // Populate for last 30 days
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split("T")[0]; // YYYY-MM-DD
-        dailyCounts.push({
-          date: dateStr,
-          count: dateToCountMap.get(dateStr) || 0
-        });
-      }
-
-      res.json({
+      res.status(201).json({
         success: true,
-        totalInquiries: stats.totalInquiries,
-        unreadCount: stats.unreadCount,
-        last7Days: stats.last7Days,
-        last30Days: stats.last30Days,
-        byContext,
-        byDispatchStatus,
-        dailyCounts
+        message: "Inquiry submitted successfully!",
+        inquiry: { id, name, phone, email, message, timestamp, formContext: inqContext, dispatchRes }
       });
     } catch (err: any) {
-      console.error("[DB Error] Failed to generate analytics:", err.message);
-      res.status(500).json({ success: false, message: "Internal server error." });
+      console.error("[Inquiry Error]:", err.message);
+      res.status(500).json({ success: false, message: "Failed to submit inquiry: " + err.message });
     }
   });
 
-  // 6. API: Diagnostic Test Email Endpoint
-  app.get("/api/admin/test-email", requireAdminAuth, async (req, res) => {
-    const config = getResolvedConfig();
-    const { emailProvider, inquiryRecipient, brevoApiKey, brevoSenderEmail, brevoSenderName, web3formsKey, smtpHost, smtpPort, smtpUser, smtpPass } = config;
-
-    console.log(`[Diagnostic] Diagnostic test email initiated. Provider: '${emailProvider}', Recipient: '${inquiryRecipient}'`);
-
-    try {
-      if (emailProvider === "brevo") {
-        if (!brevoApiKey) {
-          console.warn("[Config Warning] Brevo is selected but brevoApiKey is not set.");
-          return res.status(400).json({
-            success: false,
-            provider: "brevo",
-            error: "BREVO_API_KEY is missing from environment/settings.",
-            config: { emailProvider, inquiryRecipient, brevoSenderEmail, brevoApiKeySet: false }
-          });
-        }
-        if (!brevoSenderEmail) {
-          console.warn("[Config Warning] Brevo is selected but brevoSenderEmail is not set.");
-        }
-
-        console.log(`[Diagnostic] Brevo test email payload sending to ${inquiryRecipient} from sender ${brevoSenderEmail || "unspecified"}`);
-
-        const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-          method: "POST",
-          headers: {
-            "api-key": brevoApiKey,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify({
-            sender: {
-              name: brevoSenderName || "AMPS Portal Diagnostic",
-              email: brevoSenderEmail || "no-reply@ampsschool.com"
-            },
-            to: [
-              {
-                email: inquiryRecipient,
-                name: "School Admin"
-              }
-            ],
-            subject: `🧪 Diagnostic Test Email - AMPS Portal (${new Date().toLocaleTimeString("en-IN")})`,
-            htmlContent: `
-              <div style="font-family: sans-serif; padding: 20px; border: 1px solid #14213d; border-radius: 5px; color: #333;">
-                <h3 style="color: #14213d; margin-top: 0; border-bottom: 2px solid #C9A227; padding-bottom: 10px;">🧪 Brevo Email Delivery Diagnostic Test</h3>
-                <p>This test email confirms that your Brevo API Key and Sender Email are properly configured and operational.</p>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; text-align: left;">
-                  <tr>
-                    <td style="padding: 8px; font-weight: bold; width: 140px;">Recipient Email:</td>
-                    <td style="padding: 8px;">${inquiryRecipient}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px; font-weight: bold;">Sender Email:</td>
-                    <td style="padding: 8px;">${brevoSenderEmail || "Not specified"}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px; font-weight: bold;">Sender Name:</td>
-                    <td style="padding: 8px;">${brevoSenderName || "AMPS Portal Diagnostic"}</td>
-                  </tr>
-                </table>
-                <div style="margin-top: 20px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px;">
-                  Sent via GET /api/admin/test-email at ${new Date().toLocaleString("en-IN")}
-                </div>
-              </div>
-            `
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log("[Diagnostic] Brevo test email dispatched successfully!", data);
-          return res.json({
-            success: true,
-            provider: "brevo",
-            statusCode: response.status,
-            brevoResponse: data,
-            recipient: inquiryRecipient,
-            sender: brevoSenderEmail,
-            message: "Test email dispatched successfully via Brevo API."
-          });
-        } else {
-          let errorData: any;
-          try {
-            errorData = await response.json();
-          } catch (e) {
-            errorData = { rawText: await response.text() };
-          }
-          console.error(`[Brevo Error] HTTP Status Code: ${response.status}`, JSON.stringify(errorData, null, 2));
-          return res.status(response.status || 500).json({
-            success: false,
-            provider: "brevo",
-            statusCode: response.status,
-            brevoError: errorData,
-            rawError: JSON.stringify(errorData),
-            message: "Brevo API rejected the test email dispatch."
-          });
-        }
-      } else if (emailProvider === "web3forms") {
-        if (!web3formsKey) {
-          return res.status(400).json({ success: false, provider: "web3forms", error: "WEB3FORMS_KEY is missing." });
-        }
-        const response = await fetch("https://api.web3forms.com/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({
-            access_key: web3formsKey,
-            name: "AMPS Diagnostic Test",
-            email: inquiryRecipient,
-            subject: "🧪 Web3Forms Diagnostic Test Email",
-            message: "Diagnostic test email from AMPS Portal."
-          })
-        });
-        const data = await response.json();
-        return res.status(response.ok && data.success ? 200 : 500).json({
-          success: !!(response.ok && data.success),
-          provider: "web3forms",
-          statusCode: response.status,
-          responseData: data
-        });
-      } else if (emailProvider === "smtp") {
-        if (!smtpHost || !smtpUser || !smtpPass) {
-          return res.status(400).json({ success: false, provider: "smtp", error: "SMTP credentials incomplete." });
-        }
-        const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: parseInt(smtpPort) || 465,
-          secure: parseInt(smtpPort) === 465,
-          auth: { user: smtpUser, pass: smtpPass },
-          connectionTimeout: 8000
-        });
-        const info = await transporter.sendMail({
-          from: `"AMPS Diagnostic" <${smtpUser}>`,
-          to: inquiryRecipient,
-          subject: "🧪 SMTP Relay Diagnostic Test Email",
-          text: "Diagnostic test email from AMPS Portal."
-        });
-        return res.json({ success: true, provider: "smtp", info });
-      } else {
-        // FormSubmit fallback
-        const formParams = new URLSearchParams();
-        formParams.append("Name", "AMPS Diagnostic Test");
-        formParams.append("Email Address", inquiryRecipient);
-        formParams.append("Message", "Diagnostic test email from AMPS Portal");
-        formParams.append("_subject", "🧪 FormSubmit Diagnostic Test Email");
-        formParams.append("_captcha", "false");
-
-        const response = await fetch(`https://formsubmit.co/${inquiryRecipient}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: formParams.toString()
-        });
-        const text = await response.text();
-        return res.status(response.ok ? 200 : 500).json({
-          success: response.ok,
-          provider: "formsubmit",
-          statusCode: response.status,
-          responseText: text.substring(0, 300)
-        });
-      }
-    } catch (err: any) {
-      console.error("[Diagnostic] Error executing diagnostic test email:", err);
-      return res.status(500).json({
-        success: false,
-        provider: emailProvider,
-        error: err.message || "Unknown error executing diagnostic test email",
-        rawError: JSON.stringify(err, Object.getOwnPropertyNames(err))
-      });
-    }
-  });
-
-  // Helper: Send OTP Email
-  async function sendOtpEmail(email: string, name: string, code: string, formContext: string = "admission"): Promise<boolean> {
-    const config = getResolvedConfig();
-    const { emailProvider, brevoApiKey, brevoSenderEmail, brevoSenderName, web3formsKey, smtpHost, smtpPort, smtpUser, smtpPass } = config;
-
-    const isCounselling = formContext === "counselling";
-    const subject = `🔒 ${code} is your AMPS Portal Email Verification Code`;
-
-    const htmlBody = `
-      <div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-        <div style="background-color: #14213D; padding: 20px; border-bottom: 4px solid #C9A227; text-align: center;">
-          <h2 style="font-family: Georgia, serif; color: #ffffff; font-size: 18px; margin: 0; font-weight: 700;">
-            Ashish Memorial Public Senior Secondary School
-          </h2>
-          <p style="color: #C9A227; font-size: 11px; margin: 4px 0 0 0; font-family: monospace; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
-            ${isCounselling ? "ACADEMIC COUNSELLING DESK" : "ADMISSION INQUIRY DESK"}
-          </p>
-        </div>
-        <div style="padding: 24px 28px; text-align: center; color: #1e293b;">
-          <p style="font-size: 14px; color: #475569; margin-top: 0;">Hello <strong>${name || "Student / Parent"}</strong>,</p>
-          <p style="font-size: 13px; color: #64748b; margin-bottom: 20px;">
-            Please use the 6-digit OTP code below to verify your email address for your ${isCounselling ? "counselling request" : "admission inquiry"}:
-          </p>
-          
-          <div style="background-color: #f8fafc; border: 2px dashed #C9A227; border-radius: 8px; padding: 16px; margin: 0 auto 20px auto; max-width: 260px;">
-            <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #14213D;">
-              ${code}
-            </span>
-          </div>
-
-          <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-            ⏱️ This code is valid for <strong>10 minutes</strong>. Please do not share this code with anyone.
-          </p>
-        </div>
-        <div style="background-color: #f8fafc; padding: 12px 24px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
-          Ashish Memorial Public Senior Secondary School · Hindaun City, Rajasthan
-        </div>
-      </div>
-    `;
-
-    try {
-      if (emailProvider === "brevo" && brevoApiKey) {
-        const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-          method: "POST",
-          headers: {
-            "api-key": brevoApiKey,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify({
-            sender: { name: brevoSenderName || "AMPS Verification Desk", email: brevoSenderEmail || "no-reply@ampsschool.com" },
-            to: [{ email, name: name || "Applicant" }],
-            subject,
-            htmlContent: htmlBody
-          })
-        });
-        return response.ok;
-      } else if (emailProvider === "web3forms" && web3formsKey) {
-        const response = await fetch("https://api.web3forms.com/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({
-            access_key: web3formsKey,
-            name: "AMPS Verification Desk",
-            email: email,
-            subject,
-            message: `Your AMPS Email Verification OTP is: ${code} (Valid for 10 minutes).`
-          })
-        });
-        return response.ok;
-      } else if (emailProvider === "smtp" && smtpHost && smtpUser && smtpPass) {
-        const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: parseInt(smtpPort) || 465,
-          secure: parseInt(smtpPort) === 465,
-          auth: { user: smtpUser, pass: smtpPass },
-          connectionTimeout: 8000
-        });
-        await transporter.sendMail({
-          from: `"AMPS Verification" <${smtpUser}>`,
-          to: email,
-          subject,
-          html: htmlBody
-        });
-        return true;
-      } else {
-        // FormSubmit Fallback
-        const formParams = new URLSearchParams();
-        formParams.append("Verification Code", code);
-        formParams.append("Name", name || "Applicant");
-        formParams.append("_subject", subject);
-        formParams.append("_captcha", "false");
-        const response = await fetch(`https://formsubmit.co/${email}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: formParams.toString()
-        });
-        return response.ok;
-      }
-    } catch (err) {
-      console.error("[OTP Email Error]", err);
-      return false;
-    }
-  }
-
-  // Helper: Check Rate Limit for Email Addresses (Max 2 emails per 24 hours, minimum 5 minutes gap)
-  function checkEmailRateLimit(email: string): { allowed: boolean; message?: string } {
-    const emailStr = String(email || "").trim().toLowerCase();
-    if (!emailStr) return { allowed: true };
-
-    const now = Date.now();
-    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-    const MINIMUM_GAP_MS = 5 * 60 * 1000; // 5 minutes gap between emails
-    const twentyFourHoursAgo = now - TWENTY_FOUR_HOURS_MS;
-
-    try {
-      // Cleanup logs older than 24 hours
-      db.prepare("DELETE FROM email_logs WHERE timestamp < ?").run(twentyFourHoursAgo);
-
-      // Get emails sent to this email address in the last 24 hours
-      const logs = db.prepare("SELECT timestamp FROM email_logs WHERE email = ? AND timestamp >= ? ORDER BY timestamp DESC")
-        .all(emailStr, twentyFourHoursAgo) as { timestamp: number }[];
-
-      // Rule 1: Max 2 emails per 24 hours
-      if (logs.length >= 2) {
-        return {
-          allowed: false,
-          message: "Security Limit: A maximum of 2 emails per 24 hours is allowed for this email address. Please try again tomorrow or contact the school office directly."
-        };
-      }
-
-      // Rule 2: Minimum 5 minutes gap between emails
-      if (logs.length > 0) {
-        const lastSentTime = logs[0].timestamp;
-        const timeDiff = now - lastSentTime;
-        if (timeDiff < MINIMUM_GAP_MS) {
-          const waitSeconds = Math.ceil((MINIMUM_GAP_MS - timeDiff) / 1000);
-          const waitMinutes = Math.ceil(waitSeconds / 60);
-          return {
-            allowed: false,
-            message: `Please wait ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''} (${waitSeconds}s) before requesting another email.`
-          };
-        }
-      }
-    } catch (err) {
-      console.error("[Rate Limit DB Error]", err);
-    }
-
-    return { allowed: true };
-  }
-
-  function recordEmailLog(email: string) {
-    const emailStr = String(email || "").trim().toLowerCase();
-    if (!emailStr) return;
-    try {
-      db.prepare("INSERT INTO email_logs (email, timestamp) VALUES (?, ?)").run(emailStr, Date.now());
-    } catch (err) {
-      console.error("[DB Error] Failed to log email timestamp:", err);
-    }
-  }
-
-  // 6.1. API: Send OTP to Email
-  app.post("/api/send-otp", async (req, res) => {
-    const { email, name, formContext } = req.body;
-    const emailStr = String(email || "").trim().toLowerCase();
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-
-    if (!emailStr || !emailRegex.test(emailStr)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid email address."
-      });
-    }
-
-    // Rate Limit Check (Max 2 per 24h & 5 min gap)
-    const rateCheck = checkEmailRateLimit(emailStr);
-    if (!rateCheck.allowed) {
-      return res.status(429).json({
-        success: false,
-        message: rateCheck.message
-      });
-    }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-
-    try {
-      db.prepare("INSERT OR REPLACE INTO otps (email, code, expires_at, created_at) VALUES (?, ?, ?, ?)").run(
-        emailStr,
-        code,
-        expiresAt,
-        new Date().toISOString()
-      );
-
-      console.log(`[OTP GENERATED] Email: ${emailStr} | Code: ${code} | Context: ${formContext || "admission"}`);
-
-      const emailSent = await sendOtpEmail(emailStr, name || "Student/Parent", code, formContext);
-
-      if (emailSent) {
-        recordEmailLog(emailStr);
-      }
-
-      res.json({
-        success: true,
-        emailSent,
-        message: `OTP verification code sent to ${emailStr}.`
-      });
-    } catch (err: any) {
-      console.error("[OTP Generation Error]", err);
-      res.status(500).json({
-        success: false,
-        message: "Failed to generate OTP code. Please try again."
-      });
-    }
-  });
-
-  // 6.2. API: Verify OTP Code
-  app.post("/api/verify-otp", (req, res) => {
-    const { email, otp } = req.body;
-    const emailStr = String(email || "").trim().toLowerCase();
-    const codeStr = String(otp || "").trim();
-
-    if (!emailStr || !codeStr) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and 6-digit OTP code are required."
-      });
-    }
-
-    const row = db.prepare("SELECT * FROM otps WHERE email = ?").get(emailStr) as { code: string; expires_at: number } | undefined;
-
-    if (!row) {
-      return res.status(400).json({
-        success: false,
-        message: "No OTP found for this email. Please click 'Send OTP' again."
-      });
-    }
-
-    if (Date.now() > row.expires_at) {
-      db.prepare("DELETE FROM otps WHERE email = ?").run(emailStr);
-      return res.status(400).json({
-        success: false,
-        message: "OTP code has expired. Please request a new OTP code."
-      });
-    }
-
-    if (row.code !== codeStr) {
-      return res.status(400).json({
-        success: false,
-        message: "Incorrect OTP code. Please check your email and try again."
-      });
-    }
-
-    // Successfully verified! Clear OTP from DB so it cannot be reused
-    db.prepare("DELETE FROM otps WHERE email = ?").run(emailStr);
-
-    res.json({
-      success: true,
-      verified: true,
-      message: "Email address verified successfully!"
-    });
-  });
-
-  // 7. API: Submit New Admission / Counselling Inquiry
-  app.post("/api/send-email", async (req, res) => {
-    const { name, phone, email, message, clientDispatched, clientStatus, clientError, formContext } = req.body;
-
-    const cleanPhone = phone ? String(phone).replace(/[\s\-\+\(\)]/g, "").replace(/^91(?=\d{10}$)/, "") : "";
-
-    if (!name || !cleanPhone || !email) {
-      return res.status(400).json({
-        success: false,
-        message: "Name, Mobile number, and Email address are required."
-      });
-    }
-
-    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid 10-digit Indian mobile number"
-      });
-    }
-
-    const emailStr = String(email).trim().toLowerCase();
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(emailStr) || emailStr.split("@")[1]?.includes("..")) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid email address with a valid domain (e.g. name@gmail.com)."
-      });
-    }
-
-    // Determine if this is a counselling booking request or a standard admission inquiry
-    const isCounselling = (formContext === "counselling") ||
-      (typeof message === "string" && (message.toLowerCase().includes("counselling") || message.toLowerCase().includes("stream selection")));
-    const resolvedContext = isCounselling ? "counselling" : "admission";
-
-    const emailSubject = isCounselling
-      ? `New Counselling Session Request: ${name} (${phone})`
-      : `New Admission Inquiry: ${name} (${phone})`;
-
-    const emailHeading = isCounselling
-      ? "New Counselling Session Request"
-      : "New Prospective Student Inquiry";
-
-    const emailIntroLine = isCounselling
-      ? "A new stream selection counselling request has been submitted on the Ashish Memorial Public School Portal:"
-      : "A new admission inquiry has been submitted on the Ashish Memorial Public School Portal:";
-
-    const messageLabel = isCounselling ? "Stream Interest" : "Message/Class";
-
-    // A. Persist locally first so no inquiry is ever lost!
-    const inquiries = readInquiries();
-    const newInquiry = {
-      id: "inq_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
-      name,
-      phone,
-      email: email || "",
-      message: message || (isCounselling ? "Requesting a stream selection counselling session (Science/Commerce/Arts)." : "Interested in school admission."),
-      timestamp: new Date().toISOString(),
-      dispatchedVia: clientDispatched ? "Browser AJAX (Direct)" : "local_only",
-      dispatchStatus: clientDispatched ? (clientStatus || "Delivered") : "Pending",
-      dispatchError: clientDispatched ? (clientError || "") : "",
-      isRead: 0,
-      context: resolvedContext,
-      status: "pending"
-    };
-
-    const config = getResolvedConfig();
-
-    // Config fields resolved from process.env with SQLite fallback
-    const emailProvider = config.emailProvider;
-    const recipient = config.inquiryRecipient;
-    const brevoApiKey = config.brevoApiKey;
-    const brevoSenderEmail = config.brevoSenderEmail;
-    const brevoSenderName = config.brevoSenderName;
-    const web3formsKey = config.web3formsKey;
-    const smtpHost = config.smtpHost;
-    const smtpPort = config.smtpPort;
-    const smtpUser = config.smtpUser;
-    const smtpPass = config.smtpPass;
-
-    // B. Dispatch based on configured provider (only if client did not already dispatch from browser)
-    console.log(`[Dispatcher] New inquiry received from ${name} (Type: ${resolvedContext}). Preferred provider: ${emailProvider}. Client Dispatched: ${clientDispatched}`);
-
-    let emailSent = clientDispatched ? true : false;
-    let providerUsed = clientDispatched ? "Browser AJAX (Direct)" : emailProvider;
-    let errorLog = clientDispatched ? (clientError || "") : "";
-
-    const formattedDate = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-
-    const htmlBody = `
-      <div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-        <!-- Top Brand Header Banner with Navy Background + Gold Accent Line -->
-        <div style="background-color: #14213D; padding: 24px; border-bottom: 4px solid #C9A227; text-align: left;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td>
-                <span style="font-family: monospace; font-size: 10px; font-weight: 700; letter-spacing: 2px; color: #C9A227; text-transform: uppercase; background-color: rgba(201, 162, 39, 0.15); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(201, 162, 39, 0.3); display: inline-block;">
-                  ${isCounselling ? "ACADEMIC COUNSELLING DESK" : "AMPS ADMISSION DESK"}
-                </span>
-                <h1 style="font-family: Georgia, serif; color: #ffffff; font-size: 20px; margin: 12px 0 4px 0; font-weight: 700;">
-                  Ashish Memorial Public Senior Secondary School
-                </h1>
-                <p style="color: #cbd5e1; font-size: 12px; margin: 0;">
-                  Hindaun City (Karauli), Rajasthan · Estd. 2005
-                </p>
-              </td>
-            </tr>
-          </table>
-        </div>
-
-        <!-- Main Body Content -->
-        <div style="padding: 26px 28px; color: #1e293b; line-height: 1.6;">
-          
-          <!-- Dynamic Email Heading -->
-          <h2 style="color: #14213D; font-family: Georgia, serif; font-size: 18px; margin-top: 0; margin-bottom: 12px; font-weight: 700; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">
-            ${emailHeading}
-          </h2>
-
-          <p style="font-size: 13px; color: #475569; margin-top: 0; margin-bottom: 20px;">
-            ${emailIntroLine}
-          </p>
-
-          <!-- Details Table with Alternating Shading & Consistent 12px 16px Padding -->
-          <table style="width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; margin-bottom: 24px;">
-            <tr style="background-color: #f8fafc;">
-              <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 12px; color: #64748b; text-transform: uppercase; width: 140px;">Name</td>
-              <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 14px; color: #0f172a;">${name}</td>
-            </tr>
-            <tr style="background-color: #ffffff;">
-              <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 12px; color: #64748b; text-transform: uppercase;">Phone</td>
-              <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 14px;">
-                <a href="tel:${phone}" style="color: #7A2331; font-weight: 700; text-decoration: none;">${phone}</a>
-              </td>
-            </tr>
-            <tr style="background-color: #f8fafc;">
-              <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 12px; color: #64748b; text-transform: uppercase;">Email</td>
-              <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
-                ${email ? `<a href="mailto:${email}" style="color: #14213D; font-weight: 600; text-decoration: none;">${email}</a>` : '<span style="color: #94a3b8; font-style: italic;">Not provided</span>'}
-              </td>
-            </tr>
-            <tr style="background-color: #ffffff;">
-              <td style="padding: 12px 16px; font-weight: 700; font-size: 12px; color: #64748b; text-transform: uppercase; vertical-align: top;">${messageLabel}</td>
-              <td style="padding: 12px 16px; font-size: 13px; color: #334155; white-space: pre-wrap; line-height: 1.5; font-weight: 500;">${message || (isCounselling ? "Requesting a stream selection counselling session (Science/Commerce/Arts)." : "Interested in school admission.")}</td>
-            </tr>
-          </table>
-
-          <!-- Highlighted Call-to-Action Box -->
-          <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #C9A227; padding: 14px 18px; border-radius: 4px; margin-bottom: 24px;">
-            <p style="margin: 0; font-size: 13px; font-weight: 700; color: #92400e;">
-              Please contact the applicant within 24 hours
-            </p>
-          </div>
-
-          <!-- Quick Action Buttons for Admin -->
-          <div style="background-color: #f1f5f9; padding: 16px; border-radius: 6px; text-align: center; border: 1px solid #cbd5e1; margin-bottom: 10px;">
-            <span style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 12px;">Quick Administrator Action</span>
-            <table style="width: 100%; max-width: 380px; margin: 0 auto; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 4px 0; text-align: center;">
-                  <a href="tel:${phone}" style="display: block; background-color: #14213D; color: #ffffff; padding: 10px 16px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: 700; line-height: 1.4;">
-                    Call Applicant (${phone})
-                  </a>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 4px 0; text-align: center;">
-                  <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hello ${name}, regarding your ${isCounselling ? 'counselling request' : 'admission inquiry'} at Ashish Memorial Public School...`)}" style="display: block; background-color: #16a34a; color: #ffffff; padding: 10px 16px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: 700; line-height: 1.4;">
-                    Reply via WhatsApp
-                  </a>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-        </div>
-
-        <!-- School Contact Info Footer with Timestamp -->
-        <div style="background-color: #f8fafc; padding: 16px 24px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; line-height: 1.5;">
-          <div style="font-weight: 700; color: #14213D; margin-bottom: 4px;">
-            Ashish Memorial Public Senior Secondary School
-          </div>
-          <div>
-            Hindaun City (Karauli), Rajasthan · Phone: 91163 04006 / 94131 82619 · Email: ampspankaj@gmail.com
-          </div>
-          <div style="margin-top: 8px; color: #94a3b8; font-size: 10px;">
-            Submitted on: ${formattedDate} IST
-          </div>
-        </div>
-
-      </div>
-    `;
-
-    if (!clientDispatched) {
-      try {
-        if (emailProvider === "brevo") {
-          if (!brevoApiKey) {
-            const missingKeyErr = "[Brevo Error] BREVO_API_KEY is not configured.";
-            console.error(missingKeyErr);
-            throw new Error(missingKeyErr);
-          }
-
-          console.log(`[Dispatcher] Routing via Brevo API to recipient: ${recipient}`);
-          const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-            method: "POST",
-            headers: {
-              "api-key": brevoApiKey,
-              "Content-Type": "application/json",
-              "Accept": "application/json"
-            },
-            body: JSON.stringify({
-              sender: {
-                name: isCounselling ? `${name} (Counselling Desk)` : `${name} via AMPS Portal`,
-                email: brevoSenderEmail || "no-reply@ampsschool.com"
-              },
-              to: [
-                {
-                  email: recipient,
-                  name: "School Admin"
-                }
-              ],
-              replyTo: email ? { email, name } : undefined,
-              subject: emailSubject,
-              htmlContent: htmlBody
-            })
-          });
-
-          if (response.ok) {
-            emailSent = true;
-            newInquiry.dispatchStatus = "Delivered";
-            console.log("[Dispatcher] Brevo API delivery successful!");
-          } else {
-            let errorJson: any;
-            try {
-              errorJson = await response.json();
-            } catch (e) {
-              errorJson = { message: await response.text() };
-            }
-            console.error(`[Brevo Error] HTTP Status Code: ${response.status}`, JSON.stringify(errorJson, null, 2));
-            const fullRawError = `[HTTP ${response.status}] ${typeof errorJson === "string" ? errorJson : JSON.stringify(errorJson)}`;
-            throw new Error(fullRawError);
-          }
-        } else if (emailProvider === "web3forms" && web3formsKey) {
-          // Option 1: Web3Forms (HTTP Client) - Most stable, bypasses all port blocks
-          console.log(`[Dispatcher] Routing via Web3Forms API to recipient: ${recipient}`);
-          const response = await fetch("https://api.web3forms.com/submit", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json"
-            },
-            body: JSON.stringify({
-              access_key: web3formsKey,
-              name: `${name} (${isCounselling ? 'Counselling Request' : 'AMPS Inquiry'})`,
-              email: recipient,
-              replyto: email || undefined,
-              subject: emailSubject,
-              message: `${emailIntroLine}\n\n` +
-                `• Name: ${name}\n` +
-                `• Phone: ${phone}\n` +
-                `• Email: ${email || "Not provided"}\n` +
-                `• ${messageLabel}: ${message || "Not specified"}\n\n` +
-                `--- Form submitted via AMPS Web Portal ---`
-            })
-          });
-
-          const data: any = await response.json();
-          if (response.ok && data.success) {
-            emailSent = true;
-            newInquiry.dispatchStatus = "Delivered";
-            console.log("[Dispatcher] Web3Forms delivery successful!");
-          } else {
-            throw new Error(data.message || "Web3Forms API rejected the post.");
-          }
-
-        } else if (emailProvider === "smtp" && smtpHost && smtpUser && smtpPass) {
-          // Option 2: Direct SMTP Connection (Note: Might time out on Cloud Run)
-          console.log(`[Dispatcher] Routing via SMTP relay through ${smtpHost}`);
-          const transporter = nodemailer.createTransport({
-            host: smtpHost,
-            port: parseInt(smtpPort) || 465,
-            secure: parseInt(smtpPort) === 465,
-            auth: {
-              user: smtpUser,
-              pass: smtpPass
-            },
-            connectionTimeout: 8000,
-            greetingTimeout: 5000
-          });
-
-          await transporter.sendMail({
-            from: `"AMPS School Portal" <${smtpUser}>`,
-            to: recipient,
-            replyTo: email || undefined,
-            subject: emailSubject,
-            html: htmlBody
-          });
-
-          emailSent = true;
-          newInquiry.dispatchStatus = "Delivered";
-          console.log("[Dispatcher] Nodemailer SMTP delivery successful!");
-
-        } else {
-          // Option 3: FormSubmit Fallback (uses local recipient email)
-          console.log(`[Dispatcher] Routing via FormSubmit urlencoded to ${recipient}`);
-
-          const formParams = new URLSearchParams();
-          formParams.append("Category", isCounselling ? "Stream Selection Counselling Request" : "Standard Admission Inquiry");
-          formParams.append("Name", name);
-          formParams.append("Phone / Mobile", phone);
-          formParams.append("Email Address", email || "Not provided");
-          if (email) {
-            formParams.append("_replyto", email);
-          }
-          formParams.append(messageLabel, message || "Not specified");
-          formParams.append("_subject", emailSubject);
-          formParams.append("_captcha", "false");
-          formParams.append("_template", "table");
-
-          const response = await fetch(`https://formsubmit.co/${recipient}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              "Accept": "text/html,application/xhtml+xml,application/xml"
-            },
-            body: formParams.toString()
-          });
-
-          const responseText = await response.text();
-          console.log(`[Dispatcher] FormSubmit responded with status: ${response.status}`);
-
-          if (response.ok) {
-            emailSent = true;
-            // Check if response contains activation warning
-            if (responseText.toLowerCase().includes("activate") || responseText.toLowerCase().includes("activation")) {
-              newInquiry.dispatchStatus = "Needs Activation";
-              console.log("[Dispatcher] FormSubmit sent activation request successfully!");
-            } else {
-              newInquiry.dispatchStatus = "Delivered";
-              console.log("[Dispatcher] FormSubmit standard delivery request sent successfully!");
-            }
-          } else {
-            throw new Error(`FormSubmit server returned status ${response.status}`);
-          }
-        }
-      } catch (err: any) {
-        console.error("[Dispatcher] Email dispatch failed:", err);
-        errorLog = err.message || "Unknown delivery error";
-        newInquiry.dispatchStatus = "Failed";
-        newInquiry.dispatchError = errorLog;
-      }
-    }
-
-    if (emailSent && emailStr) {
-      recordEmailLog(emailStr);
-    }
-
-    newInquiry.dispatchedVia = providerUsed;
-    inquiries.push(newInquiry);
-    saveInquiries(inquiries);
-
-    // Return status to client
-    res.json({
-      success: true, // Always true because the inquiry was successfully stored locally
-      emailSent,
-      dispatchStatus: newInquiry.dispatchStatus,
-      dispatchError: errorLog,
-      inquiry: newInquiry,
-      whatsappRedirectUrl: `https://api.whatsapp.com/send?phone=${config.whatsappPhone}&text=` + encodeURIComponent(
-        `*AMPS Admission Inquiry Form*\n\n` +
-        `• *Name:* ${name}\n` +
-        `• *Phone:* ${phone}\n` +
-        `• *Message:* ${message || "Looking for admission"}\n\n` +
-        `_Inquiry successfully stored in website log database._`
-      )
-    });
-  });
-
-  // 6.1 API: Admin Login
-  app.post("/api/admin/login", rateLimitLogin, (req, res) => {
+  // ─── ADMIN AUTHENTICATION APIs ───────────────────────────────────────────
+  app.post("/api/admin/login", rateLimitLogin, async (req, res) => {
     const { username, password } = req.body;
+    const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+
     if (!username || !password) {
       return res.status(400).json({ success: false, message: "Username and password are required." });
     }
 
-    const genericError = "Invalid username or password";
-    const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
-
     try {
-      const cred = ADMIN_CREDENTIALS[String(username).toLowerCase().trim()];
-      if (!cred || cred.password !== password) {
+      const cleanUser = String(username).toLowerCase().trim();
+      const resUser = await db.execute({
+        sql: "SELECT * FROM admin_users WHERE LOWER(username) = ?",
+        args: [cleanUser]
+      });
+      const user = resUser.rows[0] as any;
+
+      if (!user) {
         recordFailedLogin(ip);
-        return res.status(401).json({ success: false, message: genericError });
+        await recordAuditLog("login_failed", cleanUser, "Unknown");
+        return res.status(401).json({ success: false, message: "Invalid username or password" });
       }
 
-      // Clear limits on successful authentication
+      let isMatch = false;
+      try {
+        isMatch = await bcrypt.compare(password, String(user.password_hash));
+      } catch (e) {
+        isMatch = false;
+      }
+
+      // Fallback 1: Plaintext match (for unhashed legacy DB records)
+      if (!isMatch && password === String(user.password_hash)) {
+        isMatch = true;
+        try {
+          const newHash = await bcrypt.hash(password, 12);
+          await db.execute({
+            sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
+            args: [newHash, cleanUser]
+          });
+        } catch (err) {
+          console.error("[Hash Upgrade Error]:", err);
+        }
+      }
+
+      // Fallback 2: Check default role passwords (e.g. ampschairman, ampssuperadmin, ampsadmin, ampsprincipal)
+      if (!isMatch) {
+        const roleDefaults: Record<string, string[]> = {
+          superadmin: [process.env.SUPERADMIN_PASSWORD || "ampssuperadmin", "ampssuperadmin", "ampsadmin"],
+          chairman: [process.env.CHAIRMAN_PASSWORD || "ampschairman", "ampschairman", "ampsadmin"],
+          administrator: [process.env.ADMIN_PASSWORD || "ampsadmin", "ampsadmin"],
+          principal: [process.env.PRINCIPAL_PASSWORD || "ampsprincipal", "ampsprincipal", "ampsadmin"]
+        };
+        const validPasswords = roleDefaults[cleanUser] || ["ampsadmin"];
+        if (validPasswords.includes(password)) {
+          isMatch = true;
+          try {
+            const newHash = await bcrypt.hash(password, 12);
+            await db.execute({
+              sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
+              args: [newHash, cleanUser]
+            });
+          } catch (err) {
+            console.error("[Hash Upgrade Error]:", err);
+          }
+        }
+      }
+
+      if (!isMatch) {
+        recordFailedLogin(ip);
+        await recordAuditLog("login_failed", String(user.username), String(user.role));
+        return res.status(401).json({ success: false, message: "Invalid username or password" });
+      }
+
       if (loginAttempts[ip]) {
         delete loginAttempts[ip];
       }
 
       const token = crypto.randomUUID();
-      const now = Date.now();
-      const expiresAt = now + 20 * 60 * 1000;
+      const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
 
-      db.prepare("INSERT INTO admin_sessions (token, username, role, createdAt, lastActivity, expiresAt) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(token, username.toLowerCase().trim(), cred.role, now, now, expiresAt);
+      await db.execute({
+        sql: "INSERT INTO admin_sessions (token, username, role, created_at, expires_at) VALUES (?, ?, ?, datetime('now'), ?)",
+        args: [token, String(user.username), String(user.role), expiresAt]
+      });
+
+      await recordAuditLog("login_success", String(user.username), String(user.role));
 
       res.json({
         success: true,
         token,
-        username: username.toLowerCase().trim(),
-        role: cred.role,
-        mustChangePassword: false
+        username: String(user.username),
+        role: String(user.role)
       });
     } catch (err: any) {
-      console.error("[Login Error] Login failed:", err.message);
-      res.status(500).json({ success: false, message: "Server login error." });
+      console.error("[Login Error]:", err.message);
+      res.status(500).json({ success: false, message: `Server login error: ${err.message || "Unknown error"}` });
     }
   });
 
-  // 6.2 API: Admin Logout
-  app.post("/api/admin/logout", requireAdminAuth, (req, res) => {
+  app.post("/api/admin/logout", requireAdminAuth, async (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
-      try {
-        db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
-      } catch (err: any) {
-        console.error("[Logout Error] Failed to delete session:", err.message);
-      }
+      await db.execute({ sql: "DELETE FROM admin_sessions WHERE token = ?", args: [token] });
+    }
+    if (req.adminUser) {
+      await recordAuditLog("logout", req.adminUser.username, req.adminUser.role);
     }
     res.json({ success: true, message: "Logged out successfully." });
   });
 
-  // 7. Serve Frontend Client Files using Vite middleware (development) or Static Server (production)
-  if (process.env.NODE_ENV !== "production") {
-    // Explicitly serve the public/ folder so images, fonts etc load correctly
-    app.use(express.static(path.join(process.cwd(), "public")));
+  // ─── INQUIRY MANAGEMENT APIs ─────────────────────────────────────────────
+  app.post("/api/admin/inquiries", requireAdminAuth, async (req, res) => {
+    try {
+      const result = await db.execute("SELECT * FROM inquiries WHERE deleted = 0 ORDER BY timestamp DESC");
+      const unreadCountRes = await db.execute("SELECT count(*) as count FROM inquiries WHERE deleted = 0 AND isRead = 0");
+      const unreadCount = Number(unreadCountRes.rows[0]?.count || 0);
 
+      res.json({ success: true, inquiries: result.rows, unreadCount });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/admin/inquiry/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await db.execute({ sql: "SELECT * FROM inquiries WHERE id = ?", args: [id] });
+      const inq = existing.rows[0] as any;
+
+      if (!inq) {
+        return res.status(404).json({ success: false, message: "Inquiry not found." });
+      }
+
+      const nowIso = new Date().toISOString();
+      const username = req.adminUser!.username;
+
+      await db.execute({
+        sql: "UPDATE inquiries SET deleted = 1, deleted_by = ?, deleted_at = ? WHERE id = ?",
+        args: [username, nowIso, id]
+      });
+
+      await recordAuditLog("inquiry_deleted", username, req.adminUser!.role, id, JSON.stringify(inq));
+
+      res.json({ success: true, message: "Inquiry moved to trash." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/clear-inquiries", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const username = req.adminUser!.username;
+      const nowIso = new Date().toISOString();
+
+      await db.execute({
+        sql: "UPDATE inquiries SET deleted = 1, deleted_by = ?, deleted_at = ?",
+        args: [username, nowIso]
+      });
+
+      await recordAuditLog("wipe_all", username, req.adminUser!.role);
+
+      res.json({ success: true, message: "All inquiries cleared." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/update-status", requireAdminAuth, async (req, res) => {
+    try {
+      const { inquiryId, status } = req.body;
+      if (!inquiryId || !status) {
+        return res.status(400).json({ success: false, message: "Inquiry ID and status required." });
+      }
+
+      await db.execute({
+        sql: "UPDATE inquiries SET status = ? WHERE id = ?",
+        args: [status, inquiryId]
+      });
+
+      res.json({ success: true, message: "Status updated successfully." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/mark-read", requireAdminAuth, async (req, res) => {
+    try {
+      const { inquiryId } = req.body;
+      if (!inquiryId) {
+        return res.status(400).json({ success: false, message: "Inquiry ID is required." });
+      }
+
+      await db.execute({
+        sql: "UPDATE inquiries SET isRead = 1 WHERE id = ?",
+        args: [inquiryId]
+      });
+
+      res.json({ success: true, message: "Inquiry marked as read." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── PASSWORD & USER MANAGEMENT APIs ────────────────────────────────────
+  app.post("/api/admin/change-password", requireAdminAuth, async (req, res) => {
+    try {
+      const username = req.adminUser!.username;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: "Current password and new password are required." });
+      }
+
+      const resUser = await db.execute({ sql: "SELECT * FROM admin_users WHERE username = ?", args: [username] });
+      const user = resUser.rows[0] as any;
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User account not found." });
+      }
+
+      const isMatch = await bcrypt.compare(currentPassword, String(user.password_hash));
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: "Current password is incorrect." });
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 12);
+      await db.execute({
+        sql: "UPDATE admin_users SET password_hash = ? WHERE username = ?",
+        args: [newHash, username]
+      });
+
+      await db.execute({
+        sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), ?)",
+        args: [username, username]
+      });
+
+      await recordAuditLog("password_changed", username, req.adminUser!.role);
+
+      res.json({ success: true, message: "Password updated successfully!" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/reset-password", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { targetUsername, newPassword } = req.body;
+      if (!targetUsername || !newPassword) {
+        return res.status(400).json({ success: false, message: "Target username and new password are required." });
+      }
+
+      const superadminUser = req.adminUser!.username;
+      const cleanTarget = String(targetUsername).toLowerCase().trim();
+      const newHash = await bcrypt.hash(newPassword, 12);
+
+      await db.execute({
+        sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
+        args: [newHash, cleanTarget]
+      });
+
+      await db.execute({
+        sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), ?)",
+        args: [cleanTarget, superadminUser]
+      });
+
+      await recordAuditLog("password_reset", superadminUser, req.adminUser!.role, cleanTarget);
+
+      res.json({ success: true, message: `Password reset successfully for '${cleanTarget}'.` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/admin/users", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const result = await db.execute("SELECT id, username, role, created_at, created_by FROM admin_users ORDER BY id ASC");
+      res.json({ success: true, users: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/admin/password-history", requireAdminAuth, async (req, res) => {
+    try {
+      const username = req.adminUser!.username;
+      const role = req.adminUser!.role;
+      let result;
+
+      if (role === "Superadmin") {
+        result = await db.execute("SELECT * FROM password_history ORDER BY id DESC LIMIT 50");
+      } else {
+        result = await db.execute({
+          sql: "SELECT * FROM password_history WHERE LOWER(username) = LOWER(?) ORDER BY id DESC LIMIT 50",
+          args: [username]
+        });
+      }
+
+      res.json({ success: true, history: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/impersonate", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { targetUsername } = req.body;
+      if (!targetUsername) {
+        return res.status(400).json({ success: false, message: "Target username is required." });
+      }
+
+      const cleanTarget = String(targetUsername).toLowerCase().trim();
+      const resUser = await db.execute({
+        sql: "SELECT * FROM admin_users WHERE LOWER(username) = ?",
+        args: [cleanTarget]
+      });
+      const targetUser = resUser.rows[0] as any;
+
+      if (!targetUser) {
+        return res.status(404).json({ success: false, message: "Target admin user not found." });
+      }
+
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+      const superadminUser = req.adminUser!.username;
+
+      await db.execute({
+        sql: "INSERT INTO admin_sessions (token, username, role, created_at, expires_at, impersonated_by) VALUES (?, ?, ?, datetime('now'), ?, ?)",
+        args: [token, targetUser.username, targetUser.role, expiresAt, superadminUser]
+      });
+
+      await recordAuditLog("impersonate_start", superadminUser, req.adminUser!.role, String(targetUser.username));
+
+      res.json({
+        success: true,
+        token,
+        username: String(targetUser.username),
+        role: String(targetUser.role),
+        impersonatedBy: superadminUser
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/exit-impersonation", requireAdminAuth, async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      let token = "";
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.split(" ")[1];
+      }
+
+      if (token) {
+        await db.execute({ sql: "DELETE FROM admin_sessions WHERE token = ?", args: [token] });
+      }
+
+      const superadminUser = req.adminUser!.impersonatedBy || req.adminUser!.username;
+      const newToken = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+
+      await db.execute({
+        sql: "INSERT INTO admin_sessions (token, username, role, created_at, expires_at) VALUES (?, ?, 'Superadmin', datetime('now'), ?)",
+        args: [newToken, superadminUser, expiresAt]
+      });
+
+      await recordAuditLog("impersonate_exit", superadminUser, "Superadmin");
+
+      res.json({
+        success: true,
+        token: newToken,
+        username: superadminUser,
+        role: "Superadmin"
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── AUDIT LOG APIs ───────────────────────────────────────────────────────
+  app.get("/api/admin/audit-log", requireAdminAuth, async (req, res) => {
+    try {
+      const result = await db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 100");
+      res.json({ success: true, auditLog: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/audit-log/:id/revoke", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const resLog = await db.execute({ sql: "SELECT * FROM audit_log WHERE id = ?", args: [id] });
+      const logItem = resLog.rows[0] as any;
+
+      if (!logItem) {
+        return res.status(404).json({ success: false, message: "Audit log entry not found." });
+      }
+
+      if (logItem.action !== "inquiry_deleted" || !logItem.target_id) {
+        return res.status(400).json({ success: false, message: "Only deleted inquiry actions can be revoked." });
+      }
+
+      const superadminUser = req.adminUser!.username;
+      const nowIso = new Date().toISOString();
+
+      await db.execute({
+        sql: "UPDATE inquiries SET deleted = 0, deleted_by = NULL, deleted_at = NULL WHERE id = ?",
+        args: [logItem.target_id]
+      });
+
+      await db.execute({
+        sql: "UPDATE audit_log SET revoked = 1, revoked_by = ?, revoked_at = ? WHERE id = ?",
+        args: [superadminUser, nowIso, id]
+      });
+
+      await recordAuditLog("inquiry_restored", superadminUser, req.adminUser!.role, String(logItem.target_id));
+
+      res.json({ success: true, message: "Inquiry restored successfully." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/admin/audit-log/:id", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { target_data } = req.body;
+
+      await db.execute({
+        sql: "UPDATE audit_log SET target_data = ? WHERE id = ?",
+        args: [target_data || "", id]
+      });
+
+      res.json({ success: true, message: "Audit log entry updated." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── SETTINGS APIs ────────────────────────────────────────────────────────
+  app.get("/api/admin/settings", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const config = await getResolvedConfig();
+      res.json({ success: true, settings: config });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/settings", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { settings } = req.body;
+      if (!settings) {
+        return res.status(400).json({ success: false, message: "Settings payload required." });
+      }
+
+      const ok = await saveSettings(settings);
+      if (ok) {
+        await recordAuditLog("settings_updated", req.adminUser!.username, req.adminUser!.role);
+        res.json({ success: true, message: "Settings saved successfully!" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to save settings." });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/test-email", requireAdminAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const testResult = await sendInquiryEmail({
+        name: "Test Administrator",
+        phone: "9999999999",
+        email: "test@example.com",
+        message: "This is a test notification email triggered from the AMPS Admin Console.",
+        context: "admission"
+      });
+
+      if (testResult.success) {
+        res.json({ success: true, message: `Test email dispatched successfully via ${testResult.via}!` });
+      } else {
+        res.status(500).json({ success: false, message: `Test email failed via ${testResult.via}: ${testResult.error}` });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── VITE OR STATIC CLIENT SERVING ────────────────────────────────────────
+  if (process.env.NODE_ENV !== "production") {
+    app.use(express.static(path.join(process.cwd(), "public")));
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "spa"
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use(express.static(path.join(process.cwd(), "public")));
+    app.use(express.static(path.join(process.cwd(), "dist")));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      res.sendFile(path.join(process.cwd(), "dist", "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[SERVER] Full-Stack App running on http://localhost:${PORT}`);
+    console.log(`[Server] AMPS School Portal running on http://localhost:${PORT}`);
   });
 }
 
