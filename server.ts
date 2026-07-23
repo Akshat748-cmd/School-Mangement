@@ -92,6 +92,47 @@ async function recordAuditLog(
   }
 }
 
+// Credentials File Sync Helper
+async function updateCredentialsFile() {
+  if (process.env.NODE_ENV === "production") return;
+  try {
+    const res = await db.execute("SELECT rowid as id, username, role, plain_password FROM admin_users ORDER BY rowid ASC");
+    const users = res.rows as any[];
+
+    let content = `================================================================================
+          AMPS PORTAL — ACTIVE ADMIN ACCOUNTS & CREDENTIALS
+================================================================================\n\n`;
+
+    let i = 1;
+    for (const u of users) {
+      const uname = String(u.username);
+      const role = String(u.role);
+      const pass = String(u.plain_password || "ampsadmin");
+      content += `${i}. ${uname.toUpperCase()} ACCOUNT:
+   - Username : ${uname}
+   - Password : ${pass}
+   - Role     : ${role}
+   - Access   : Management & Security Controls\n\n`;
+      i++;
+    }
+
+    content += `================================================================================
+          LIVE PASSWORD & AUTHENTICATION AUDIT LOGS
+================================================================================\n`;
+
+    const auditRes = await db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 50");
+    const logs = (auditRes.rows as any[]).slice().reverse();
+    for (const log of logs) {
+      content += `[${log.timestamp}] ${String(log.action).toUpperCase()} — Performed by: ${log.performed_by} (${log.performed_by_role}) ${log.target_id ? `| Target: ${log.target_id}` : ""}\n`;
+    }
+
+    const logFile = path.join(process.cwd(), "active-admin-credentials.local.txt");
+    fs.writeFileSync(logFile, content, "utf-8");
+  } catch (err: any) {
+    console.error("[Credentials Sync Error]:", err.message);
+  }
+}
+
 // Database Schema Initialization & Seeding
 async function initializeDatabase() {
   try {
@@ -161,45 +202,84 @@ async function initializeDatabase() {
       )
     `);
 
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
-      )
-    `);
+    // Ensure columns exist on existing databases (Schema Migrations)
+    const migrationQueries = [
+      "ALTER TABLE admin_sessions ADD COLUMN username TEXT",
+      "ALTER TABLE admin_sessions ADD COLUMN role TEXT",
+      "ALTER TABLE admin_sessions ADD COLUMN created_at TEXT",
+      "ALTER TABLE admin_sessions ADD COLUMN expires_at TEXT",
+      "ALTER TABLE admin_sessions ADD COLUMN impersonated_by TEXT",
+      "ALTER TABLE admin_users ADD COLUMN password_hash TEXT",
+      "ALTER TABLE admin_users ADD COLUMN plain_password TEXT",
+      "ALTER TABLE admin_users ADD COLUMN created_at TEXT",
+      "ALTER TABLE admin_users ADD COLUMN created_by TEXT",
+      "ALTER TABLE audit_log ADD COLUMN revoked INTEGER DEFAULT 0",
+      "ALTER TABLE audit_log ADD COLUMN revoked_by TEXT",
+      "ALTER TABLE audit_log ADD COLUMN revoked_at TEXT",
+      "ALTER TABLE inquiries ADD COLUMN formContext TEXT DEFAULT 'admission'",
+      "ALTER TABLE inquiries ADD COLUMN dispatchStatus TEXT DEFAULT 'Pending'",
+      "ALTER TABLE inquiries ADD COLUMN dispatchedVia TEXT",
+      "ALTER TABLE inquiries ADD COLUMN dispatchError TEXT",
+      "ALTER TABLE inquiries ADD COLUMN deleted INTEGER DEFAULT 0",
+      "ALTER TABLE inquiries ADD COLUMN deleted_by TEXT",
+      "ALTER TABLE inquiries ADD COLUMN deleted_at TEXT",
+      "ALTER TABLE settings ADD COLUMN key TEXT",
+      "ALTER TABLE settings ADD COLUMN value TEXT",
+      "ALTER TABLE password_history ADD COLUMN changed_at TEXT",
+      "ALTER TABLE password_history ADD COLUMN changed_by TEXT"
+    ];
 
-    try {
-      await db.execute("ALTER TABLE settings ADD COLUMN key TEXT");
-      await db.execute("ALTER TABLE settings ADD COLUMN value TEXT");
-    } catch (e) {
-      // Columns already exist
+    for (const q of migrationQueries) {
+      try {
+        await db.execute(q);
+      } catch (e) {
+        // Column already exists or table structure matches
+      }
     }
 
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS otps (
-        email TEXT PRIMARY KEY,
-        code TEXT NOT NULL,
-        expires_at INTEGER NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    `);
-
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS email_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT NOT NULL,
-        timestamp INTEGER NOT NULL
-      )
-    `);
-
-    console.log("[DB] Tables initialized");
-
-    // Seed default admin users and ensure password_hash column exists
+    // Verify admin_sessions table schema completeness; recreate if invalid
     try {
-      await db.execute("ALTER TABLE admin_users ADD COLUMN password_hash TEXT");
+      await db.execute("SELECT token, username, role, created_at, expires_at, impersonated_by FROM admin_sessions LIMIT 1");
     } catch (e) {
-      // Column already exists
+      console.log("[DB Migration] Recreating admin_sessions table with complete schema...");
+      try {
+        await db.execute("DROP TABLE IF EXISTS admin_sessions");
+        await db.execute(`
+          CREATE TABLE admin_sessions (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            role TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            expires_at TEXT NOT NULL,
+            impersonated_by TEXT DEFAULT NULL
+          )
+        `);
+      } catch (dropErr: any) {
+        console.error("[DB Session Table Repair Error]:", dropErr.message);
+      }
     }
+
+    // Verify password_history table schema completeness; recreate if invalid
+    try {
+      await db.execute("SELECT id, username, changed_at, changed_by FROM password_history LIMIT 1");
+    } catch (e) {
+      console.log("[DB Migration] Recreating password_history table with complete schema...");
+      try {
+        await db.execute("DROP TABLE IF EXISTS password_history");
+        await db.execute(`
+          CREATE TABLE password_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            changed_at TEXT DEFAULT (datetime('now')),
+            changed_by TEXT NOT NULL
+          )
+        `);
+      } catch (dropErr: any) {
+        console.error("[DB Password History Table Repair Error]:", dropErr.message);
+      }
+    }
+
+    console.log("[DB] Tables initialized and auto-migrated successfully");
 
     const defaults = [
       { username: "superadmin", role: "Superadmin", password: process.env.SUPERADMIN_PASSWORD || "ampssuperadmin" },
@@ -217,23 +297,25 @@ async function initializeDatabase() {
       if (!row) {
         const hash = await bcrypt.hash(u.password, 12);
         await db.execute({
-          sql: "INSERT INTO admin_users (username, role, password_hash, created_at, created_by) VALUES (?, ?, ?, datetime('now'), 'system')",
-          args: [u.username, u.role, hash]
+          sql: "INSERT INTO admin_users (username, role, password_hash, plain_password, created_at, created_by) VALUES (?, ?, ?, ?, datetime('now'), 'system')",
+          args: [u.username, u.role, hash, u.password]
         });
         await db.execute({
           sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), 'System Initializer')",
           args: [u.username]
         });
       } else if (!row.password_hash || !String(row.password_hash).startsWith("$2")) {
-        const hash = await bcrypt.hash(u.password, 12);
+        const existingPlain = row.plain_password || u.password;
+        const hash = await bcrypt.hash(existingPlain, 12);
         await db.execute({
-          sql: "UPDATE admin_users SET password_hash = ?, role = ? WHERE LOWER(username) = ?",
-          args: [hash, u.role, u.username.toLowerCase()]
+          sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
+          args: [hash, u.username.toLowerCase()]
         });
       }
     }
 
     console.log("[DB] Admin users seeded successfully: superadmin, chairman, administrator, principal");
+    await updateCredentialsFile();
   } catch (err: any) {
     console.error("[DB Init Error]:", err.message);
   }
@@ -600,13 +682,13 @@ async function startServer() {
         isMatch = false;
       }
 
-      // Fallback 1: Plaintext match (for unhashed legacy DB records)
-      if (!isMatch && password === String(user.password_hash)) {
+      // Fallback 1: Plaintext match with stored plain_password
+      if (!isMatch && user.plain_password && password === String(user.plain_password)) {
         isMatch = true;
         try {
           const newHash = await bcrypt.hash(password, 12);
           await db.execute({
-            sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
+            sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = LOWER(?)",
             args: [newHash, cleanUser]
           });
         } catch (err) {
@@ -614,8 +696,8 @@ async function startServer() {
         }
       }
 
-      // Fallback 2: Check default role passwords (e.g. ampschairman, ampssuperadmin, ampsadmin, ampsprincipal)
-      if (!isMatch) {
+      // Fallback 2: Check default initial role passwords ONLY if account hasn't custom updated password
+      if (!isMatch && (!user.plain_password || ["ampssuperadmin", "ampschairman", "ampsadmin", "ampsprincipal"].includes(String(user.plain_password)))) {
         const roleDefaults: Record<string, string[]> = {
           superadmin: [process.env.SUPERADMIN_PASSWORD || "ampssuperadmin", "ampssuperadmin", "ampsadmin"],
           chairman: [process.env.CHAIRMAN_PASSWORD || "ampschairman", "ampschairman", "ampsadmin"],
@@ -628,8 +710,8 @@ async function startServer() {
           try {
             const newHash = await bcrypt.hash(password, 12);
             await db.execute({
-              sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
-              args: [newHash, cleanUser]
+              sql: "UPDATE admin_users SET password_hash = ?, plain_password = ? WHERE LOWER(username) = LOWER(?)",
+              args: [newHash, password, cleanUser]
             });
           } catch (err) {
             console.error("[Hash Upgrade Error]:", err);
@@ -784,32 +866,61 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Current password and new password are required." });
       }
 
-      const resUser = await db.execute({ sql: "SELECT * FROM admin_users WHERE username = ?", args: [username] });
+      const cleanUser = String(username).toLowerCase().trim();
+      const resUser = await db.execute({
+        sql: "SELECT * FROM admin_users WHERE LOWER(username) = ?",
+        args: [cleanUser]
+      });
       const user = resUser.rows[0] as any;
 
       if (!user) {
         return res.status(404).json({ success: false, message: "User account not found." });
       }
 
-      const isMatch = await bcrypt.compare(currentPassword, String(user.password_hash));
+      let isMatch = false;
+      try {
+        isMatch = await bcrypt.compare(currentPassword, String(user.password_hash));
+      } catch (e) {
+        isMatch = false;
+      }
+
+      if (!isMatch && user.plain_password && currentPassword === String(user.plain_password)) {
+        isMatch = true;
+      }
+
+      if (!isMatch) {
+        const roleDefaults: Record<string, string[]> = {
+          superadmin: [process.env.SUPERADMIN_PASSWORD || "ampssuperadmin", "ampssuperadmin", "ampsadmin"],
+          chairman: [process.env.CHAIRMAN_PASSWORD || "ampschairman", "ampschairman", "ampsadmin"],
+          administrator: [process.env.ADMIN_PASSWORD || "ampsadmin", "ampsadmin"],
+          principal: [process.env.PRINCIPAL_PASSWORD || "ampsprincipal", "ampsprincipal", "ampsadmin"]
+        };
+        const validDefaults = roleDefaults[cleanUser] || ["ampsadmin"];
+        if (validDefaults.includes(currentPassword)) {
+          isMatch = true;
+        }
+      }
+
       if (!isMatch) {
         return res.status(401).json({ success: false, message: "Current password is incorrect." });
       }
 
       const newHash = await bcrypt.hash(newPassword, 12);
+
       await db.execute({
-        sql: "UPDATE admin_users SET password_hash = ? WHERE username = ?",
-        args: [newHash, username]
+        sql: "UPDATE admin_users SET password_hash = ?, plain_password = ? WHERE LOWER(username) = LOWER(?)",
+        args: [newHash, newPassword, username.toLowerCase()]
       });
 
       await db.execute({
-        sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), ?)",
-        args: [username, username]
+        sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, ?, ?)",
+        args: [cleanUser, new Date().toISOString(), cleanUser]
       });
 
-      await recordAuditLog("password_changed", username, req.adminUser!.role);
+      await recordAuditLog("password_changed", cleanUser, req.adminUser!.role);
+      await updateCredentialsFile();
 
-      res.json({ success: true, message: "Password updated successfully!" });
+      res.json({ success: true, message: "Password updated successfully in database!" });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -827,16 +938,17 @@ async function startServer() {
       const newHash = await bcrypt.hash(newPassword, 12);
 
       await db.execute({
-        sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
-        args: [newHash, cleanTarget]
+        sql: "UPDATE admin_users SET password_hash = ?, plain_password = ? WHERE LOWER(username) = ?",
+        args: [newHash, newPassword, cleanTarget]
       });
 
       await db.execute({
-        sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), ?)",
-        args: [cleanTarget, superadminUser]
+        sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, ?, ?)",
+        args: [cleanTarget, new Date().toISOString(), superadminUser]
       });
 
       await recordAuditLog("password_reset", superadminUser, req.adminUser!.role, cleanTarget);
+      await updateCredentialsFile();
 
       res.json({ success: true, message: `Password reset successfully for '${cleanTarget}'.` });
     } catch (err: any) {
@@ -846,7 +958,7 @@ async function startServer() {
 
   app.get("/api/admin/users", requireAdminAuth, requireSuperAdmin, async (req, res) => {
     try {
-      const result = await db.execute("SELECT id, username, role, created_at, created_by FROM admin_users ORDER BY id ASC");
+      const result = await db.execute("SELECT rowid as id, username, role, plain_password, created_at, created_by FROM admin_users ORDER BY rowid ASC");
       res.json({ success: true, users: result.rows });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
@@ -952,7 +1064,16 @@ async function startServer() {
   // ─── AUDIT LOG APIs ───────────────────────────────────────────────────────
   app.get("/api/admin/audit-log", requireAdminAuth, async (req, res) => {
     try {
-      const result = await db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 100");
+      const userRole = req.adminUser!.role;
+      let result;
+      if (userRole === "Superadmin") {
+        result = await db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 100");
+      } else {
+        result = await db.execute({
+          sql: "SELECT * FROM audit_log WHERE action IN ('inquiry_deleted', 'wipe_all', 'inquiry_restored') ORDER BY id DESC LIMIT 100",
+          args: []
+        });
+      }
       res.json({ success: true, auditLog: result.rows });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });

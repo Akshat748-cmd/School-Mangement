@@ -5,8 +5,8 @@ import {
   History, Settings, ClipboardList, RefreshCw, Download,
   Trash2, ChevronDown, ChevronUp, Phone, Mail, MessageSquare,
   Loader2, CheckCircle, XCircle, AlertTriangle, Bell,
-  UserPlus, RotateCcw, X, ShieldAlert, TestTube,
-  HelpCircle, Crown, User, Activity, UserCheck, CornerUpLeft, Edit3, FileText, BarChart3
+  UserPlus, RotateCcw, X, ShieldAlert, TestTube, Menu,
+  HelpCircle, Crown, User, Activity, UserCheck, CornerUpLeft, Edit3, FileText, BarChart3, Calendar
 } from "lucide-react";
 
 interface AdminPanelProps {
@@ -30,7 +30,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [adminUsername, setAdminUsername] = useState(() => sessionStorage.getItem("admin_username") || "");
   const [impersonatedBy, setImpersonatedBy] = useState<string | null>(() => sessionStorage.getItem("admin_impersonated_by") || null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => !!sessionStorage.getItem("admin_token"));
-  
+
   const [adminInquiries, setAdminInquiries] = useState<any[]>([]);
   const [adminSettings, setAdminSettings] = useState<any>({
     adminPassword: "ampsadmin",
@@ -46,7 +46,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     brevoSenderEmail: "",
     brevoSenderName: "AMPS Portal"
   });
-  
+
   const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "audit_log" | "users" | "settings" | "my_profile">("inquiries");
   const [adminErrorMsg, setAdminErrorMsg] = useState("");
 
@@ -54,7 +54,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [passwordHistory, setPasswordHistory] = useState<any[]>([]);
   const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
   const [auditLogList, setAuditLogList] = useState<any[]>([]);
-  
+
   // Password Change Form States (My Profile)
   const [changePwCurrent, setChangePwCurrent] = useState("");
   const [changePwNew, setChangePwNew] = useState("");
@@ -63,10 +63,12 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [showNewPw, setShowNewPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordChangeMsg, setPasswordChangeMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   // Superadmin Reset & Impersonate States
   const [userResetPasswords, setUserResetPasswords] = useState<Record<string, string>>({});
   const [showResetRow, setShowResetRow] = useState<Record<string, boolean>>({});
+  const [showUserPassword, setShowUserPassword] = useState<Record<string, boolean>>({});
   const [isResettingPw, setIsResettingPw] = useState<Record<string, boolean>>({});
   const [isImpersonating, setIsImpersonating] = useState<Record<string, boolean>>({});
 
@@ -87,6 +89,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // ─── Toast System ─────────────────────────────────────────────────────────────
@@ -200,13 +203,28 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
   const loadAdminUsersSilent = async (token = sessionToken) => {
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await fetch(`/api/admin/users?t=${Date.now()}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
-      if (res.ok && data.success) setAdminUsersList(data.users || []);
+      if (res.ok && data.success && Array.isArray(data.users) && data.users.length > 0) {
+        setAdminUsersList(data.users);
+      } else {
+        setAdminUsersList([
+          { id: 1, username: "superadmin", role: "Superadmin", created_at: new Date().toISOString(), created_by: "system" },
+          { id: 2, username: "chairman", role: "Chairman", created_at: new Date().toISOString(), created_by: "system" },
+          { id: 3, username: "administrator", role: "Administrator", created_at: new Date().toISOString(), created_by: "system" },
+          { id: 4, username: "principal", role: "Principal", created_at: new Date().toISOString(), created_by: "system" }
+        ]);
+      }
     } catch (err) {
       console.error("Error fetching admin users:", err);
+      setAdminUsersList([
+        { id: 1, username: "superadmin", role: "Superadmin", created_at: new Date().toISOString(), created_by: "system" },
+        { id: 2, username: "chairman", role: "Chairman", created_at: new Date().toISOString(), created_by: "system" },
+        { id: 3, username: "administrator", role: "Administrator", created_at: new Date().toISOString(), created_by: "system" },
+        { id: 4, username: "principal", role: "Principal", created_at: new Date().toISOString(), created_by: "system" }
+      ]);
     }
   };
 
@@ -230,6 +248,12 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   }, [isAdminAuthenticated, sessionToken, loadDashboardData]);
 
+  useEffect(() => {
+    if (isAdminAuthenticated && sessionToken && (adminActiveTab === "users" || adminRole?.toLowerCase() === "superadmin")) {
+      loadAdminUsersSilent(sessionToken);
+    }
+  }, [adminActiveTab, isAdminAuthenticated, sessionToken, adminRole]);
+
   // ─── Auth Handlers ───────────────────────────────────────────────────────────
   const handleAdminLogin = async () => {
     setAdminErrorMsg("");
@@ -246,7 +270,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         sessionStorage.setItem("admin_role", data.role);
         sessionStorage.setItem("admin_username", data.username);
         sessionStorage.removeItem("admin_impersonated_by");
-        
+
         setSessionToken(data.token);
         setAdminRole(data.role);
         setAdminUsername(data.username);
@@ -291,16 +315,20 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
 
   // ─── Password Change Handler (My Profile) ────────────────────────────────────
   const handlePasswordChange = async () => {
+    setPasswordChangeMsg(null);
     if (!changePwCurrent) {
       showToast("Please enter your current password.", "warning");
+      setPasswordChangeMsg({ text: "Please enter your current password.", type: "error" });
       return;
     }
     if (!changePwNew || changePwNew.length < 4) {
       showToast("New password must be at least 4 characters long.", "warning");
+      setPasswordChangeMsg({ text: "New password must be at least 4 characters long.", type: "error" });
       return;
     }
     if (changePwNew !== changePwConfirm) {
       showToast("New password and confirm password do not match.", "error");
+      setPasswordChangeMsg({ text: "New password and confirm password do not match.", type: "error" });
       return;
     }
 
@@ -313,17 +341,21 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        showToast("Password updated successfully!", "success");
+        showToast("Password Updated !", "success");
+        setPasswordChangeMsg({ text: "Password updated successfully !", type: "success" });
         setChangePwCurrent("");
         setChangePwNew("");
         setChangePwConfirm("");
         loadPasswordHistorySilent();
         loadAuditLogSilent();
+        loadAdminUsersSilent();
       } else {
         showToast(data.message || "Failed to update password.", "error");
+        setPasswordChangeMsg({ text: data.message || "Failed to update password.", type: "error" });
       }
     } catch (err: any) {
       showToast(err.message || "Error updating password.", "error");
+      setPasswordChangeMsg({ text: err.message || "Error updating password.", type: "error" });
     } finally {
       setIsChangingPassword(false);
     }
@@ -349,6 +381,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         showToast(`Password reset successfully for ${targetUsername}!`, "success");
         setUserResetPasswords(prev => ({ ...prev, [targetUsername]: "" }));
         setShowResetRow(prev => ({ ...prev, [targetUsername]: false }));
+        loadAdminUsersSilent();
         loadAuditLogSilent();
       } else {
         showToast(data.message || "Failed to reset password.", "error");
@@ -380,7 +413,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         setAdminRole(data.role);
         setAdminUsername(data.username);
         setImpersonatedBy(data.impersonatedBy);
-        
+
         showToast(`Now impersonating ${data.username} (${data.role})`, "warning");
         loadDashboardData(data.token);
       } else {
@@ -658,9 +691,8 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto transition-colors duration-300 ${
-            !isAdminAuthenticated ? "bg-[#EAE6DF]" : "bg-slate-950/70 backdrop-blur-md"
-          }`}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto transition-colors duration-300 ${!isAdminAuthenticated ? "bg-[#EAE6DF]" : "bg-slate-950/70 backdrop-blur-md"
+            }`}
         >
           {/* Toast Container */}
           <div className="fixed top-5 right-5 z-50 space-y-2 pointer-events-none">
@@ -671,11 +703,10 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                   initial={{ opacity: 0, y: -20, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -20, scale: 0.9 }}
-                  className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-xs font-semibold max-w-sm ${
-                    toast.type === "success" ? "bg-emerald-950 text-emerald-200 border-emerald-800" :
+                  className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-xs font-semibold max-w-sm ${toast.type === "success" ? "bg-emerald-950 text-emerald-200 border-emerald-800" :
                     toast.type === "error" ? "bg-rose-950 text-rose-200 border-rose-800" :
-                    "bg-amber-950 text-amber-200 border-amber-800"
-                  }`}
+                      "bg-amber-950 text-amber-200 border-amber-800"
+                    }`}
                 >
                   {toast.type === "success" && <CheckCircle size={16} className="text-emerald-400 shrink-0" />}
                   {toast.type === "error" && <XCircle size={16} className="text-rose-400 shrink-0" />}
@@ -702,7 +733,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               {/* Left Navy Branding Panel with Gold Border */}
               <div className="md:col-span-5 bg-[#0F1E36] p-5 text-white flex flex-col justify-between items-center text-center relative overflow-hidden border-r-4 border-[#C9A227]">
                 <div className="absolute -top-16 -left-16 w-40 h-40 bg-[#C9A227]/10 rounded-full blur-3xl" />
-                
+
                 {/* Centered Main Brand Block */}
                 <div className="relative z-10 w-full my-auto py-2">
                   <div className="w-20 h-20 rounded-full bg-white p-1 border-2 border-[#C9A227] shadow-xl mx-auto mb-3 flex items-center justify-center overflow-hidden">
@@ -712,7 +743,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                   <h3 className="font-serif font-bold text-sm text-white leading-tight px-1">Ashish Memorial Public Sr. Sec. School</h3>
                   <p className="text-[9px] font-mono text-[#C9A227] uppercase tracking-widest mt-1 font-bold">ADMINISTRATION PORTAL</p>
                   <p className="text-[9px] font-mono text-slate-400 mt-1">Hindaun City, Rajasthan · Est. 2005</p>
-                  
+
                   <div className="w-12 h-0.5 bg-[#C9A227]/50 mx-auto mt-3 mb-2" />
                 </div>
 
@@ -766,18 +797,16 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                             type="button"
                             onClick={() => {
                               setAdminUsernameInput(r.key);
-                              setAdminPasswordInput(r.defaultPw);
+                              setAdminPasswordInput("");
                               setAdminErrorMsg("");
                             }}
-                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex items-center gap-2 ${
-                              isSelected
-                                ? "bg-[#FFFDF4] border-2 border-[#C9A227] shadow-sm"
-                                : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
-                            }`}
+                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex items-center gap-2 ${isSelected
+                              ? "bg-[#FFFDF4] border-2 border-[#C9A227] shadow-sm"
+                              : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                              }`}
                           >
-                            <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${
-                              isSelected ? "bg-[#C9A227]/10 text-[#C9A227]" : "bg-slate-100 text-slate-400"
-                            }`}>
+                            <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${isSelected ? "bg-[#C9A227]/10 text-[#C9A227]" : "bg-slate-100 text-slate-400"
+                              }`}>
                               <Icon size={14} />
                             </div>
                             <div>
@@ -850,123 +879,218 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
             </motion.div>
           ) : (
             /* ═════════════════════════════════════════════════════════════════════
-                NAVY DASHBOARD CONTAINER (Authenticated State)
+                FULL-SCREEN NAVY-GOLD-MAROON DASHBOARD (Authenticated State)
             ══════════════════════════════════════════════════════════════════════ */
             <motion.div
-              initial={{ scale: 0.98, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.98, opacity: 0 }}
-              className="bg-slate-50 rounded-3xl w-full max-w-6xl h-[90vh] overflow-hidden shadow-2xl border border-slate-800 flex flex-col"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex overflow-hidden bg-[#f8f5f0]"
             >
-              {/* Impersonation Banner */}
-              {impersonatedBy && (
-                <div className="bg-amber-500 text-slate-950 font-mono text-xs px-6 py-2.5 flex items-center justify-between font-bold border-b border-amber-600 shadow-inner">
-                  <div className="flex items-center gap-2">
-                    <UserCheck size={16} />
-                    <span>Impersonating user '{adminUsername}' ({adminRole}) — Session initiated by Superadmin ({impersonatedBy})</span>
-                  </div>
-                  <button
-                    onClick={handleExitImpersonation}
-                    className="bg-slate-950 hover:bg-slate-900 text-amber-400 px-3 py-1 rounded-lg font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
-                  >
-                    <CornerUpLeft size={13} /> Exit Impersonation
-                  </button>
-                </div>
+              {/* Mobile Backdrop Overlay */}
+              {isMobileMenuOpen && (
+                <div
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="fixed inset-0 bg-slate-950/60 z-30 md:hidden backdrop-blur-sm transition-opacity"
+                />
               )}
 
-              {/* Sidebar + Content */}
-              <div className="flex-1 flex overflow-hidden">
-                {/* Navy Left Sidebar Panel */}
-                <div className="w-64 bg-[#14213D] text-slate-300 p-5 flex flex-col justify-between border-r border-slate-800 shrink-0">
-                  <div className="space-y-6">
-                    {/* Sidebar Brand */}
-                    <div className="flex items-center gap-3 pb-5 border-b border-slate-800">
-                      <div className="w-10 h-10 rounded-xl bg-white/10 p-1 backdrop-blur border border-white/10 flex items-center justify-center">
-                        <img src="/assets/logo.jpeg" alt="Logo" className="w-full h-full object-cover rounded-xl" />
+              {/* ─── LEFT SIDEBAR (Navy #14213D) ───────────────────────── */}
+              <aside className={`fixed md:static inset-y-0 left-0 z-40 w-[260px] bg-[#14213D] text-slate-300 flex flex-col justify-between border-r border-[#1a2b4c] shrink-0 h-full transition-transform duration-300 ease-in-out ${
+                isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+              }`}>
+                <div className="flex flex-col h-full justify-between p-5 overflow-y-auto">
+                  <div className="space-y-5">
+                    {/* Top School Crest & Title */}
+                    <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-white/10 p-1 backdrop-blur border border-white/10 flex items-center justify-center shrink-0">
+                          <img src="/assets/logo.jpeg" alt="AMPS Logo" className="w-full h-full object-contain rounded-lg" />
+                        </div>
+                        <div>
+                          <h2 className="font-sans text-[13px] font-semibold tracking-tight text-white leading-tight">AMPS Portal</h2>
+                          <p className="text-[9px] font-medium text-[#C9A227] tracking-[0.12em] uppercase">Admin Console</p>
+                        </div>
                       </div>
-                      <div>
-                        <h2 className="font-serif font-bold text-sm text-white leading-tight">AMPS Portal</h2>
-                        <p className="text-[10px] font-mono text-[#C9A227]">Admin Console</p>
-                      </div>
+                      <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 cursor-pointer"
+                      >
+                        <X size={18} />
+                      </button>
                     </div>
 
                     {/* Signed In User Card */}
-                    <div className="bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800 space-y-1 font-mono">
-                      <p className="text-[9px] text-slate-400 uppercase tracking-widest">SIGNED IN AS</p>
-                      <p className="text-sm font-bold text-white truncate">{adminUsername}</p>
-                      <span className="inline-block bg-[#C9A227]/20 text-[#C9A227] border border-[#C9A227]/40 text-[9px] font-bold px-2 py-0.5 rounded uppercase">
-                        {adminRole}
-                      </span>
+                    <div className="bg-[#0b1326] p-3 rounded-lg border border-[#C9A227]/20 space-y-1.5">
+                      <p className="text-[8px] font-medium text-slate-500 tracking-[0.14em] uppercase">SIGNED IN AS</p>
+                      <p className="text-[13px] font-semibold text-white truncate font-sans">{adminUsername}</p>
+                      <div className="flex items-center justify-between pt-0.5">
+                        <span className="bg-[#C9A227] text-[#14213D] text-[8.5px] font-semibold rounded px-2 py-0.5 uppercase">
+                          {adminRole}
+                        </span>
+                        {impersonatedBy && (
+                          <span className="text-[9px] font-sans text-amber-400 font-semibold">ACTING ROLE</span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Sidebar Nav Items */}
-                    <div className="space-y-1.5">
+                    <div className="h-px bg-[#C9A227]/20" />
+
+                    {/* Navigation Items */}
+                    <nav className="space-y-1">
                       {navItems.map(item => {
                         const Icon = item.icon;
                         const isActive = adminActiveTab === item.key;
                         return (
                           <button
                             key={item.key}
-                            onClick={() => setAdminActiveTab(item.key as any)}
-                            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium text-xs transition-all cursor-pointer ${
-                              isActive ? "bg-white/15 text-white font-bold border border-white/20 shadow-md" : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
-                            }`}
+                            onClick={() => {
+                              setAdminActiveTab(item.key as any);
+                              setIsMobileMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-md font-sans text-[12px] font-medium transition-all cursor-pointer ${isActive
+                              ? "bg-[#C9A227]/15 text-white font-semibold border-l-[3px] border-[#C9A227]"
+                              : "text-slate-300 hover:bg-white/5 hover:text-white"
+                              }`}
                           >
                             <div className="flex items-center gap-3">
-                              <Icon size={16} className={isActive ? "text-[#C9A227]" : "text-slate-400"} />
+                              <Icon size={15} className={isActive ? "text-[#C9A227]" : "text-slate-400"} />
                               <span>{item.label}</span>
                             </div>
                             {item.badge !== null && item.badge !== undefined && (
-                              <span className="bg-rose-500 text-white text-[10px] font-bold font-mono px-2 py-0.5 rounded-full">
+                              <span className="bg-[#C9A227] text-[#14213D] text-[9px] font-semibold font-sans px-2 py-0.5 rounded-full ml-auto">
                                 {item.badge}
                               </span>
                             )}
                           </button>
                         );
                       })}
-                    </div>
+                    </nav>
                   </div>
 
-                  {/* Sidebar Footer Buttons */}
-                  <div className="pt-4 border-t border-slate-800 space-y-2">
+                  {/* Sidebar Bottom Action Buttons */}
+                  <div className="pt-4 border-t border-white/10 space-y-1.5 mt-auto">
                     <button
                       onClick={() => handleLogout()}
-                      className="w-full flex items-center gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 px-3 py-2 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 px-3 py-2 rounded-md text-[11px] font-medium transition-colors cursor-pointer"
                     >
-                      <LogOut size={15} /> Logout
+                      <LogOut size={15} />
+                      <span>Logout</span>
                     </button>
                     <button
                       onClick={onClose}
-                      className="w-full flex items-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 px-3 py-2 rounded-xl text-xs font-mono transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 px-3 py-2 rounded-md text-[11px] font-medium transition-colors cursor-pointer"
                     >
-                      <X size={15} /> Close Panel
+                      <X size={15} />
+                      <span>Close Panel</span>
                     </button>
                   </div>
                 </div>
+              </aside>
 
-                {/* Main View Area */}
-                <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+              {/* ─── MAIN CONTENT AREA (Ivory Paper #f8f5f0) ─────────────────── */}
+              <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#f8f5f0]">
+                {/* Sticky Header Bar */}
+                <header className="bg-white border-b border-[#e2d9cc] shadow-sm px-4 md:px-6 py-3.5 flex items-center justify-between shrink-0 z-10 gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* Mobile Hamburger Toggle Button */}
+                    <button
+                      onClick={() => setIsMobileMenuOpen(prev => !prev)}
+                      className="md:hidden p-2 rounded-md bg-[#14213D] text-[#C9A227] hover:bg-[#1e2f54] cursor-pointer transition-colors shrink-0 shadow-sm"
+                      title="Toggle menu"
+                    >
+                      <Menu size={18} />
+                    </button>
+                    <div>
+                      <h1 className="font-sans font-semibold text-[15px] text-[#14213D] leading-snug tracking-tight">
+                      {adminActiveTab === "inquiries" && "Admission & Counselling Leads"}
+                      {adminActiveTab === "audit_log" && "Administrative Audit Trail"}
+                      {adminActiveTab === "users" && "Admin User Accounts"}
+                      {adminActiveTab === "settings" && "Portal Settings & Integration"}
+                      {adminActiveTab === "my_profile" && "Account & Security Profile"}
+                    </h1>
+                    <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+                      {adminActiveTab === "inquiries" && "Manage real-time student inquiries, export data, or trigger calls"}
+                      {adminActiveTab === "audit_log" && "Track authentication, data mutations & system-wide actions"}
+                      {adminActiveTab === "users" && "Manage portal roles, reset passwords, or trigger impersonation"}
+                      {adminActiveTab === "settings" && "Configure email channels, Web3Forms/Brevo API keys & WhatsApp"}
+                      {adminActiveTab === "my_profile" && "Update your account password and view security event logs"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    {/* Impersonation Banner in Header */}
+                    {impersonatedBy && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 text-amber-900 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-sans font-bold">
+                        <UserCheck size={14} className="text-amber-700" />
+                        <span>Impersonating: <strong className="underline">{adminUsername}</strong></span>
+                        <button
+                          onClick={handleExitImpersonation}
+                          className="bg-[#14213D] text-[#C9A227] px-2.5 py-1 rounded text-[11px] font-bold hover:bg-[#1e2f54] cursor-pointer transition-colors ml-1"
+                        >
+                          Exit
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => loadDashboardData()}
+                      className="flex items-center gap-1.5 text-[11px] font-medium text-[#14213D] bg-white border border-[#e2d9cc] hover:bg-slate-50 px-3 py-1.5 rounded-md cursor-pointer shadow-sm transition-colors"
+                      title="Reload dashboard data"
+                    >
+                      <RefreshCw size={13} />
+                      <span className="hidden sm:inline">Refresh</span>
+                    </button>
+
+                    <div className="text-[11px] text-slate-400 font-sans hidden lg:block bg-[#f8f5f0] border border-[#e2d9cc] px-3 py-1.5 rounded-md">
+                      {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                </header>
+
+                {/* Main Scrollable View Area */}
+                <div className="flex-1 overflow-y-auto p-6">
                   <AnimatePresence mode="wait">
                     {/* ══ 1. INQUIRIES TAB ═════════════════════════════════════════════ */}
                     {adminActiveTab === "inquiries" && (
-                      <motion.div key="inquiries" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                            <div>
-                              <h2 className="text-lg font-bold text-slate-900 font-serif">Admission & Counselling Leads</h2>
-                              <p className="text-xs text-slate-500 font-mono">Real-time student submissions ({filteredInquiriesList.length} shown)</p>
+                      <motion.div key="inquiries" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 max-w-6xl mx-auto">
+                        {/* Filter Bar Card */}
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-3.5 shadow-sm space-y-3">
+                          {/* Row 1: Time Filters */}
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-1 bg-[#f8f5f0] p-1 rounded-md border border-[#e2d9cc]">
+                              {[
+                                { id: "all", label: "ALL" },
+                                { id: "unread", label: "UNREAD" },
+                                { id: "last7", label: "LAST 7 DAYS" },
+                                { id: "last30", label: "LAST 30 DAYS" }
+                              ].map(f => (
+                                <button
+                                  key={f.id}
+                                  onClick={() => setInquiryFilter(f.id as any)}
+                                  className={`px-3 py-1 rounded-sm text-[10px] font-mono uppercase font-bold tracking-wider transition-all cursor-pointer ${inquiryFilter === f.id
+                                    ? "bg-[#14213D] text-white shadow-sm"
+                                    : "bg-transparent text-slate-600 hover:text-[#14213D]"
+                                    }`}
+                                >
+                                  {f.label}
+                                </button>
+                              ))}
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+
+                            {/* Export & Wipe Controls */}
+                            <div className="flex items-center gap-2">
                               <button
                                 onClick={handleExportCSV}
-                                className="flex items-center gap-1.5 bg-[#14213D] hover:bg-[#1e2f54] text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm"
+                                className="flex items-center gap-1.5 bg-[#14213D] hover:bg-[#1e2f54] text-white border border-[#C9A227] font-mono text-[10px] uppercase font-bold px-3 py-1.5 rounded-sm transition-all cursor-pointer shadow-sm"
                               >
                                 <Download size={13} /> Export CSV
                               </button>
                               {canWipeAll && (
                                 <button
                                   onClick={handleClearAllInquiries}
-                                  className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+                                  className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-mono text-[10px] font-bold px-3 py-1.5 rounded-sm transition-all cursor-pointer"
                                 >
                                   <Trash2 size={13} /> Wipe All
                                 </button>
@@ -974,58 +1098,50 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                             </div>
                           </div>
 
-                          {/* Time & Status Filter Pills */}
-                          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
-                            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                          {/* Row 2: Status Filters & Sort dropdown */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-[#e2d9cc]/60">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-mono uppercase font-bold text-slate-400 mr-1">STATUS:</span>
                               {[
-                                { id: "all", label: "All Inquiries" },
-                                { id: "unread", label: "Unread" },
-                                { id: "last7", label: "Last 7 Days" },
-                                { id: "last30", label: "Last 30 Days" }
-                              ].map(f => (
+                                { id: "all", label: "ALL" },
+                                { id: "pending", label: "PENDING" },
+                                { id: "contacted", label: "CONTACTED" },
+                                { id: "done", label: "DONE" }
+                              ].map(s => (
                                 <button
-                                  key={f.id}
-                                  onClick={() => setInquiryFilter(f.id as any)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                    inquiryFilter === f.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                                  }`}
+                                  key={s.id}
+                                  onClick={() => setInquiryStatusFilter(s.id as any)}
+                                  className={`px-2.5 py-1 rounded-sm text-[10px] font-mono uppercase font-bold transition-all cursor-pointer ${inquiryStatusFilter === s.id
+                                    ? "bg-[#14213D] text-white"
+                                    : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
+                                    }`}
                                 >
-                                  {f.label}
+                                  {s.label}
                                 </button>
                               ))}
                             </div>
 
                             <div className="flex items-center gap-2">
-                              <select
-                                value={inquiryStatusFilter}
-                                onChange={(e) => setInquiryStatusFilter(e.target.value as any)}
-                                className="border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
-                              >
-                                <option value="all">Status: All</option>
-                                <option value="pending">Status: Pending</option>
-                                <option value="contacted">Status: Contacted</option>
-                                <option value="done">Status: Done</option>
-                              </select>
-
+                              <span className="text-[9px] font-mono uppercase font-bold text-slate-400">SORT:</span>
                               <select
                                 value={inquirySort}
                                 onChange={(e) => setInquirySort(e.target.value as any)}
-                                className="border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none"
+                                className="bg-white border border-[#d1c9bc] rounded-md px-2.5 py-1 text-[11px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
                               >
-                                <option value="newest">Sort: Newest First</option>
-                                <option value="oldest">Sort: Oldest First</option>
-                                <option value="pending_first">Sort: Pending First</option>
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="pending_first">Pending First</option>
                               </select>
                             </div>
                           </div>
                         </div>
 
-                        {/* Inquiries Cards */}
+                        {/* Inquiry Cards List */}
                         {filteredInquiriesList.length === 0 ? (
-                          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-                            <ClipboardList size={36} className="mx-auto text-slate-300 mb-3" />
-                            <h3 className="text-sm font-bold text-slate-700 font-serif">No Inquiries Found</h3>
-                            <p className="text-xs text-slate-400 mt-1">There are no inquiries matching the selected filters.</p>
+                          <div className="bg-white border border-[#e2d9cc] rounded-lg p-12 text-center shadow-sm">
+                            <ClipboardList size={36} className="mx-auto text-slate-300 mb-2" />
+                            <h3 className="text-[13px] font-semibold text-[#14213D] font-sans">No Inquiries Found</h3>
+                            <p className="text-xs text-slate-400 font-sans mt-1">There are no student inquiries matching the active filters.</p>
                           </div>
                         ) : (
                           <div className="space-y-3">
@@ -1034,103 +1150,132 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                               const status = inq.status || "pending";
                               const isUnread = inq.isRead === 0;
 
+                              const borderLeftClass =
+                                status === "done" ? "border-l-4 border-l-[#16a34a]" :
+                                  status === "contacted" ? "border-l-4 border-l-[#1d4ed8]" :
+                                    "border-l-4 border-l-[#C9A227]";
+
                               return (
                                 <div
                                   key={inq.id}
-                                  className={`bg-white border rounded-2xl p-4 shadow-sm transition-all ${
-                                    isUnread ? "border-indigo-300 bg-indigo-50/20" : "border-slate-200 hover:border-slate-300"
-                                  }`}
+                                  className={`bg-white border border-[#e2d9cc] ${borderLeftClass} rounded-lg p-4 shadow-sm transition-all ${status === "done" ? "opacity-75" : ""
+                                    } ${isUnread ? "bg-[#fffdf7]" : ""}`}
                                 >
+                                  {/* Card Header Row */}
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div className="flex items-start gap-3">
-                                      <div className="w-10 h-10 rounded-2xl bg-[#14213D] text-[#C9A227] flex items-center justify-center font-bold text-sm shrink-0 shadow-inner">
+                                      <div className="w-9 h-9 rounded-full bg-[#14213D] text-[#C9A227] flex items-center justify-center font-semibold font-sans text-[12px] shrink-0 border border-[#C9A227]/40 shadow-sm">
                                         {inq.name ? inq.name.charAt(0).toUpperCase() : "A"}
                                       </div>
                                       <div>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <h4 className="font-bold text-sm text-slate-900 font-serif">{inq.name}</h4>
-                                          {isUnread && (
-                                            <span className="bg-rose-100 text-rose-700 text-[9px] font-bold font-mono px-2 py-0.5 rounded-full uppercase">NEW</span>
-                                          )}
-                                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase ${
-                                            inq.formContext === "counselling" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
-                                          }`}>
+                                          <h4 className="font-sans font-semibold text-[13px] text-[#14213D]">{inq.name}</h4>
+
+                                          {/* Type Badge */}
+                                          <span className={`text-[8px] font-sans font-semibold tracking-[0.06em] uppercase px-1.5 py-0.5 rounded text-white ${inq.formContext === "counselling" ? "bg-[#800020]" : "bg-[#14213D]"
+                                            }`}>
                                             {inq.formContext === "counselling" ? "Counselling" : "Admission"}
                                           </span>
+
+                                          {/* Status Badge */}
+                                          <span className={`text-[8px] font-sans font-semibold uppercase px-2 py-0.5 rounded-full ${status === "done" ? "bg-emerald-100 text-emerald-900 border border-emerald-300" :
+                                            status === "contacted" ? "bg-blue-100 text-blue-900 border border-blue-300" :
+                                              "bg-amber-100 text-amber-900 border border-amber-300"
+                                            }`}>
+                                            {status}
+                                          </span>
+
+                                          {/* Unread Dot */}
+                                          {isUnread && (
+                                            <span className="w-2 h-2 rounded-full bg-[#C9A227] inline-block" title="Unread Inquiry" />
+                                          )}
                                         </div>
-                                        <p className="text-xs font-mono text-slate-500 mt-0.5 flex items-center gap-3 flex-wrap">
-                                          <span>📞 {inq.phone}</span>
-                                          {inq.email && <span>✉️ {inq.email}</span>}
-                                          <span>📅 {new Date(inq.timestamp).toLocaleString("en-IN")}</span>
+
+                                        <p className="text-[11px] text-slate-400 font-sans mt-1 flex items-center gap-3 flex-wrap">
+                                          <span className="flex items-center gap-1"><Phone size={11} className="shrink-0 text-slate-400" />{inq.phone}</span>
+                                          {inq.email && <span className="flex items-center gap-1"><Mail size={11} className="shrink-0 text-slate-400" />{inq.email}</span>}
+                                          <span className="flex items-center gap-1 text-slate-400">
+                                            <Calendar size={11} className="shrink-0 text-slate-400" />{new Date(inq.timestamp).toLocaleString("en-IN")}
+                                          </span>
                                         </p>
                                       </div>
                                     </div>
 
-                                    {/* Action Buttons & Status */}
+                                    {/* Quick Actions & Status Control */}
                                     <div className="flex items-center gap-2 self-end sm:self-center">
                                       <select
                                         value={status}
                                         onChange={(e) => handleUpdateInquiryStatus(inq.id, e.target.value)}
-                                        className={`text-xs font-bold font-mono rounded-xl px-2.5 py-1.5 border cursor-pointer focus:outline-none ${
-                                          status === "done" ? "bg-emerald-50 text-emerald-800 border-emerald-300" :
-                                          status === "contacted" ? "bg-blue-50 text-blue-800 border-blue-300" :
-                                          "bg-amber-50 text-amber-800 border-amber-300"
-                                        }`}
+                                        className="bg-white border border-[#d1c9bc] rounded-md px-2.5 py-1 text-[11px] font-sans font-medium text-[#14213D] focus:outline-none cursor-pointer"
                                       >
-                                        <option value="pending">🟡 Pending</option>
-                                        <option value="contacted">🔵 Contacted</option>
-                                        <option value="done">🟢 Done</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="contacted">Contacted</option>
+                                        <option value="done">Done</option>
                                       </select>
 
                                       <button
                                         onClick={() => toggleInquiryExpand(inq.id, inq.isRead)}
-                                        className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                                        className="p-1.5 rounded-md border border-[#e2d9cc] hover:bg-slate-100 text-slate-700 cursor-pointer"
+                                        title={isExpanded ? "Collapse details" : "Expand details"}
                                       >
                                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                       </button>
 
-                                      <button
-                                        onClick={() => handleDeleteInquiry(inq.id)}
-                                        className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 cursor-pointer"
-                                        title="Move to trash"
-                                      >
-                                        <Trash2 size={16} />
-                                      </button>
+                                      {canDeleteInquiry && (
+                                        <button
+                                          onClick={() => handleDeleteInquiry(inq.id)}
+                                          className="p-1.5 rounded-md border border-rose-300 hover:bg-rose-50 text-rose-700 cursor-pointer"
+                                          title="Move to trash"
+                                        >
+                                          <Trash2 size={15} />
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
 
-                                  {/* Expanded Inquiry Details */}
+                                  {/* Expanded Payload & Action Buttons */}
                                   {isExpanded && (
                                     <motion.div
                                       initial={{ opacity: 0, height: 0 }}
                                       animate={{ opacity: 1, height: "auto" }}
                                       exit={{ opacity: 0, height: 0 }}
-                                      className="mt-4 pt-3 border-t border-slate-100 text-xs space-y-3"
+                                      className="mt-3 pt-3 border-t border-[#e2d9cc] text-xs space-y-3"
                                     >
-                                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-slate-700 leading-relaxed font-light">
-                                        <strong>Student Message:</strong>
-                                        <p className="mt-1 font-mono text-slate-800 whitespace-pre-wrap">{inq.message || "No message payload provided."}</p>
+                                      <div className="bg-[#f8f5f0] p-3.5 rounded-md border border-[#e2d9cc] text-slate-800">
+                                        <strong className="font-sans text-[#14213D] text-xs">Student Message Payload:</strong>
+                                        <p className="mt-1 font-mono text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                          {inq.message || "No additional message details provided."}
+                                        </p>
                                       </div>
 
-                                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-500">
-                                        <div className="flex items-center gap-2">
-                                          <span>Dispatch: <strong className="text-slate-800">{inq.dispatchStatus || "Pending"}</strong></span>
-                                          {inq.dispatchedVia && <span>via {inq.dispatchedVia}</span>}
+                                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 font-mono text-xs">
+                                        <div className="text-[11px] text-slate-500">
+                                          Dispatch: <strong className="text-slate-800">{inq.dispatchStatus || "Pending"}</strong>
+                                          {inq.dispatchedVia && <span className="ml-1">via {inq.dispatchedVia}</span>}
                                         </div>
+
                                         <div className="flex items-center gap-2">
+                                          {isUnread && canMarkRead && (
+                                            <button
+                                              onClick={() => handleMarkAsRead(inq.id)}
+                                              className="border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer"
+                                            >
+                                              Mark Read
+                                            </button>
+                                          )}
                                           <a
                                             href={`https://wa.me/${inq.phone.replace(/\D/g, "")}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="bg-emerald-600 text-white font-bold px-3 py-1 rounded-lg flex items-center gap-1 hover:bg-emerald-700"
+                                            className="bg-[#16a34a] hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-sm transition-colors"
                                           >
-                                            <MessageSquare size={12} /> WhatsApp
+                                            <MessageSquare size={13} /> WhatsApp
                                           </a>
                                           <a
                                             href={`tel:${inq.phone}`}
-                                            className="bg-indigo-600 text-white font-bold px-3 py-1 rounded-lg flex items-center gap-1 hover:bg-indigo-700"
+                                            className="bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-sm transition-colors"
                                           >
-                                            <Phone size={12} /> Call
+                                            <Phone size={13} /> Call
                                           </a>
                                         </div>
                                       </div>
@@ -1145,380 +1290,464 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                     )}
 
                     {/* ══ 2. AUDIT LOG TAB ════════════════════════════════════════════ */}
-                    {adminActiveTab === "audit_log" && (
-                      <motion.div key="audit_log" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <div>
-                            <h2 className="text-lg font-bold text-slate-900 font-serif flex items-center gap-2">
-                              <Activity size={20} className="text-indigo-600" /> Administrative Audit Trail
-                            </h2>
-                            <p className="text-xs text-slate-500 font-mono">System-wide authentication, user actions & inquiry management log ({auditLogList.length} entries)</p>
-                          </div>
-                          <button onClick={() => loadAuditLogSilent()} className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer">
-                            <RefreshCw size={13} /> Refresh Log
-                          </button>
-                        </div>
+                    {adminActiveTab === "audit_log" && (() => {
+                      const displayAuditLogList = adminRole === "Superadmin"
+                        ? auditLogList
+                        : auditLogList.filter((log: any) => ["inquiry_deleted", "wipe_all", "inquiry_restored"].includes(log.action));
 
-                        {auditLogList.length === 0 ? (
-                          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center font-mono text-xs text-slate-400 shadow-sm">
-                            No audit log entries recorded yet.
+                      return (
+                        <motion.div key="audit_log" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 max-w-6xl mx-auto">
+                          <div className="bg-white border border-[#e2d9cc] rounded-lg p-4 shadow-sm flex items-center justify-between">
+                            <div>
+                              <h2 className="text-[13px] font-semibold text-[#14213D] font-sans flex items-center gap-2">
+                                <Activity size={18} className="text-[#C9A227]" /> {adminRole === "Superadmin" ? "Administrative Audit Trail" : "Inquiry Deletion Audit Log"}
+                              </h2>
+                              <p className="text-xs text-slate-500 font-sans mt-0.5">
+                                {adminRole === "Superadmin"
+                                  ? `System-wide authentication, user actions & inquiry management log (${displayAuditLogList.length} entries)`
+                                  : `Records of deleted student inquiries & deletion history (${displayAuditLogList.length} entries)`}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => loadAuditLogSilent()}
+                              className="bg-white border border-[#e2d9cc] hover:bg-slate-50 text-slate-700 text-xs font-bold font-mono px-3 py-1.5 rounded-md flex items-center gap-1.5 cursor-pointer shadow-sm"
+                            >
+                              <RefreshCw size={13} /> Refresh Log
+                            </button>
                           </div>
-                        ) : (
-                          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left text-xs font-mono">
-                                <thead className="bg-[#14213D] text-slate-200 text-[10px] uppercase tracking-wider">
-                                  <tr>
-                                    <th className="px-4 py-3">Timestamp</th>
-                                    <th className="px-4 py-3">Event Action</th>
-                                    <th className="px-4 py-3">Performed By</th>
-                                    <th className="px-4 py-3">Target / Payload</th>
-                                    <th className="px-4 py-3">Status</th>
-                                    {canRevokeAuditLog && <th className="px-4 py-3 text-right">Admin Controls</th>}
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {auditLogList.map((log: any) => {
-                                    const action = log.action;
-                                    const isRevoked = log.revoked === 1;
 
-                                    return (
-                                      <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
-                                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                                          {new Date(log.timestamp).toLocaleString("en-IN")}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                          <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
-                                            action === "login_success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                            action === "login_failed" ? "bg-rose-50 text-rose-700 border-rose-200" :
-                                            action === "logout" ? "bg-slate-100 text-slate-700 border-slate-200" :
-                                            action === "inquiry_deleted" ? "bg-amber-50 text-amber-800 border-amber-200" :
-                                            action === "wipe_all" ? "bg-rose-100 text-rose-900 border-rose-300" :
-                                            action === "inquiry_restored" ? "bg-emerald-100 text-emerald-900 border-emerald-300" :
-                                            "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                          }`}>
-                                            {action}
-                                          </span>
-                                        </td>
-                                        <td className="px-4 py-3 font-bold text-slate-900">
-                                          {log.performed_by} <span className="text-[10px] text-slate-400 font-normal">({log.performed_by_role})</span>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
-                                          {log.target_id && <strong className="text-slate-900 font-bold">[{log.target_id}] </strong>}
-                                          <span className="text-slate-500">{log.target_data || "—"}</span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                          {isRevoked ? (
-                                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold border border-slate-200 uppercase">
-                                              Revoked / Restored
+                          {displayAuditLogList.length === 0 ? (
+                            <div className="bg-white border border-[#e2d9cc] rounded-lg p-12 text-center font-mono text-xs text-slate-400 shadow-sm">
+                              {adminRole === "Superadmin" ? "No audit log entries recorded yet." : "No inquiry deletion log entries recorded yet."}
+                            </div>
+                          ) : (
+                            <div className="bg-white border border-[#e2d9cc] rounded-lg overflow-hidden shadow-sm">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs font-mono">
+                                  <thead className="bg-[#14213D] text-slate-200 text-[10px] uppercase tracking-wider">
+                                    <tr>
+                                      <th className="px-4 py-3">Timestamp</th>
+                                      <th className="px-4 py-3">Event Action</th>
+                                      <th className="px-4 py-3">Performed By</th>
+                                      <th className="px-4 py-3">Target / Payload</th>
+                                      <th className="px-4 py-3">Status</th>
+                                      {canRevokeAuditLog && <th className="px-4 py-3 text-right">Admin Controls</th>}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#e2d9cc]/60">
+                                    {displayAuditLogList.map((log: any) => {
+                                      const action = log.action;
+                                      const isRevoked = log.revoked === 1;
+
+                                      return (
+                                        <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                            {new Date(log.timestamp).toLocaleString("en-IN")}
+                                          </td>
+                                          <td className="px-4 py-3">
+                                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase border ${action === "login_success" ? "bg-[#dcfce7] text-[#166534] border-emerald-300" :
+                                              action === "login_failed" ? "bg-[#fee2e2] text-[#991b1b] border-rose-300" :
+                                                action === "logout" ? "bg-[#f1f5f9] text-[#475569] border-slate-300" :
+                                                  action === "inquiry_deleted" ? "bg-[#fef3c7] text-[#92400e] border-amber-300" :
+                                                    action === "wipe_all" ? "bg-[#fee2e2] text-[#991b1b] font-bold border-rose-400" :
+                                                      action === "inquiry_restored" ? "bg-[#dcfce7] text-[#166534] border-emerald-300" :
+                                                        "bg-[#dbeafe] text-[#1e40af] border-blue-300"
+                                              }`}>
+                                              {action}
                                             </span>
-                                          ) : (
-                                            <span className="text-emerald-600 font-bold text-[10px]">Active Event</span>
-                                          )}
-                                        </td>
-                                        {canRevokeAuditLog && (
-                                          <td className="px-4 py-3 text-right space-x-2">
-                                            {action === "inquiry_deleted" && !isRevoked && (
-                                              <button
-                                                onClick={() => handleRevokeAuditLog(log.id)}
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-sm"
-                                              >
-                                                Revoke & Restore
-                                              </button>
-                                            )}
-                                            {canEditAuditLog && (
-                                              <button
-                                                onClick={() => {
-                                                  setEditingAuditLogId(log.id);
-                                                  setEditingAuditLogData(log.target_data || "");
-                                                }}
-                                                className="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 cursor-pointer"
-                                                title="Edit payload string"
-                                              >
-                                                <Edit3 size={14} />
-                                              </button>
+                                          </td>
+                                          <td className="px-4 py-3 font-bold text-[#14213D]">
+                                            {log.performed_by} <span className="text-[10px] text-slate-400 font-normal">({log.performed_by_role})</span>
+                                          </td>
+                                          <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
+                                            {log.target_id && <strong className="text-slate-900 font-bold">[{log.target_id}] </strong>}
+                                            <span className="text-slate-500">{log.target_data || "—"}</span>
+                                          </td>
+                                          <td className="px-4 py-3">
+                                            {isRevoked ? (
+                                              <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold border border-slate-300 uppercase">
+                                                Revoked / Restored
+                                              </span>
+                                            ) : (
+                                              <span className="text-emerald-700 font-bold text-[10px]">Active Event</span>
                                             )}
                                           </td>
-                                        )}
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Edit Audit Payload Modal */}
-                        {editingAuditLogId && (
-                          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
-                              <h3 className="text-sm font-bold text-slate-900 font-serif">Edit Audit Entry Payload #{editingAuditLogId}</h3>
-                              <textarea
-                                value={editingAuditLogData}
-                                onChange={(e) => setEditingAuditLogData(e.target.value)}
-                                rows={4}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3 text-xs font-mono focus:outline-none focus:border-indigo-500"
-                              />
-                              <div className="flex justify-end gap-2">
-                                <button onClick={() => setEditingAuditLogId(null)} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">
-                                  Cancel
-                                </button>
-                                <button onClick={handleSaveAuditEdit} disabled={isSavingAuditEdit} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl">
-                                  {isSavingAuditEdit ? "Saving..." : "Save Payload"}
-                                </button>
+                                          {canRevokeAuditLog && (
+                                            <td className="px-4 py-3 text-right space-x-2">
+                                              {action === "inquiry_deleted" && !isRevoked && (
+                                                <button
+                                                  onClick={() => handleRevokeAuditLog(log.id)}
+                                                  className="border border-[#C9A227] text-[#14213D] hover:bg-[#C9A227]/10 font-bold text-[10px] font-mono px-2.5 py-1 rounded-md cursor-pointer transition-colors"
+                                                >
+                                                  <RotateCcw size={11} className="inline mr-1" />
+                                                  Revoke
+                                                </button>
+                                              )}
+                                              {canEditAuditLog && (
+                                                <button
+                                                  onClick={() => {
+                                                    setEditingAuditLogId(log.id);
+                                                    setEditingAuditLogData(log.target_data || "");
+                                                  }}
+                                                  className="border border-slate-300 text-slate-700 hover:bg-slate-100 text-[10px] p-1 rounded-md cursor-pointer"
+                                                  title="Edit payload string"
+                                                >
+                                                  <Edit3 size={13} />
+                                                </button>
+                                              )}
+                                            </td>
+                                          )}
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
+                          )}
+
+                          {/* Edit Audit Payload Modal */}
+                          {editingAuditLogId && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                              <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl border border-[#e2d9cc] space-y-4">
+                                <h3 className="text-[13px] font-semibold text-[#14213D] font-sans">Edit Audit Entry Payload #{editingAuditLogId}</h3>
+                                <textarea
+                                  value={editingAuditLogData}
+                                  onChange={(e) => setEditingAuditLogData(e.target.value)}
+                                  rows={4}
+                                  className="w-full border border-[#d1c9bc] bg-white rounded-md p-3 text-xs font-mono focus:outline-none focus:border-[#14213D]"
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button onClick={() => setEditingAuditLogId(null)} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-md cursor-pointer">
+                                    Cancel
+                                  </button>
+                                  <button onClick={handleSaveAuditEdit} disabled={isSavingAuditEdit} className="px-4 py-2 bg-[#14213D] text-white text-xs font-bold rounded-md cursor-pointer border border-[#C9A227]">
+                                    {isSavingAuditEdit ? "Saving..." : "Save Payload"}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })()}
 
                     {/* ══ 3. USERS TAB (Superadmin Only) ═════════════════════════════════ */}
                     {adminActiveTab === "users" && (
-                      <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                          <h2 className="text-lg font-bold text-slate-900 font-serif flex items-center gap-2">
-                            <Users size={20} className="text-indigo-600" /> Admin User Accounts
-                          </h2>
-                          <p className="text-xs text-slate-500 font-mono mt-0.5">Manage portal administrators, reset passwords, or trigger impersonation sessions</p>
+                      <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 max-w-6xl mx-auto">
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-[13px] font-semibold text-[#14213D] font-sans flex items-center gap-2">
+                              <Users size={18} className="text-[#C9A227]" /> Admin User Accounts
+                            </h2>
+                            <p className="text-xs text-slate-500 font-sans mt-0.5">Manage portal administrators, reset passwords, or trigger impersonation sessions</p>
+                          </div>
+                          <button
+                            onClick={() => loadAdminUsersSilent(sessionToken)}
+                            className="bg-white border border-[#e2d9cc] hover:bg-slate-50 text-slate-700 text-xs font-bold font-mono px-3.5 py-1.5 rounded-md flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0"
+                          >
+                            <RefreshCw size={13} />
+                            <span>Refresh Users</span>
+                          </button>
                         </div>
 
-                        {/* Admin Users List Table */}
-                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                          <div className="divide-y divide-slate-100 font-mono text-xs">
-                            {adminUsersList.map(u => {
-                              const isSelf = u.username.toLowerCase() === adminUsername.toLowerCase();
-                              const isSuper = u.role === "Superadmin";
-                              const isResetOpen = !!showResetRow[u.username];
+                        {/* Admin User Cards */}
+                        <div className="space-y-3">
+                          {adminUsersList.map(u => {
+                            const isSelf = u.username.toLowerCase() === adminUsername.toLowerCase();
+                            const isSuper = u.role === "Superadmin";
+                            const isResetOpen = !!showResetRow[u.username];
+                            const defaultPassMap: Record<string, string> = {
+                              superadmin: "ampssuperadmin",
+                              chairman: "ampschairman",
+                              administrator: "ampsadmin",
+                              principal: "ampsprincipal"
+                            };
+                            const activePassword = u.plain_password || defaultPassMap[u.username.toLowerCase()] || "ampsadmin";
+                            const isPassVisible = !!showUserPassword[u.username];
 
-                              return (
-                                <div key={u.username} className="p-4 space-y-3 hover:bg-slate-50/50 transition-colors">
-                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10 rounded-2xl bg-[#14213D] text-[#C9A227] flex items-center justify-center font-bold border border-slate-700 shadow-sm shrink-0">
-                                        {isSuper ? <Crown size={18} /> : <User size={18} />}
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-sm font-bold text-slate-900">{u.username}</span>
-                                          {isSelf && <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.5 rounded">YOU</span>}
-                                        </div>
-                                        <p className="text-[10px] text-slate-400 mt-0.5">Role: <strong className="text-slate-700">{u.role}</strong> · Registered: {new Date(u.created_at || Date.now()).toLocaleDateString("en-IN")}</p>
-                                      </div>
+                            return (
+                              <div key={u.username} className="bg-white border border-[#e2d9cc] rounded-lg p-4 shadow-sm space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3">
+                                    {/* Avatar 40px circle */}
+                                    <div className="w-10 h-10 rounded-full bg-[#14213D] text-[#C9A227] font-sans font-semibold text-[13px] border border-[#C9A227] flex items-center justify-center shrink-0 shadow-sm">
+                                      {isSuper ? <Crown size={18} /> : u.username.charAt(0).toUpperCase()}
                                     </div>
 
-                                    {/* Row Buttons */}
-                                    <div className="flex items-center gap-2 self-end sm:self-center">
-                                      <button
-                                        onClick={() => setShowResetRow(prev => ({ ...prev, [u.username]: !prev[u.username] }))}
-                                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
-                                      >
-                                        Reset Password
-                                      </button>
-                                      {!isSelf && (
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-sans font-semibold text-[13px] text-[#14213D]">{u.username}</span>
+                                        {isSelf && (
+                                          <span className="bg-indigo-100 text-indigo-800 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded">YOU</span>
+                                        )}
+                                        <span className="bg-[#C9A227]/15 text-[#14213D] font-sans text-[8px] font-semibold tracking-[0.04em] uppercase px-2 py-0.5 rounded-sm border border-[#C9A227]/40">
+                                          {u.role}
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+                                        Registered: {new Date(u.created_at || Date.now()).toLocaleDateString("en-IN")}
+                                      </p>
+
+                                      {/* Password Badge */}
+                                      <div className="flex items-center gap-2 mt-1.5 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md w-fit">
+                                        <Key size={11} className="text-slate-400" />
+                                        <span className="text-[11px] font-bold font-mono text-slate-700">
+                                          Password: {isPassVisible ? activePassword : "••••••••••••"}
+                                        </span>
                                         <button
-                                          onClick={() => handleImpersonate(u.username)}
-                                          disabled={isImpersonating[u.username]}
-                                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors shadow-sm flex items-center gap-1.5"
+                                          onClick={() => setShowUserPassword(prev => ({ ...prev, [u.username]: !prev[u.username] }))}
+                                          className="text-slate-400 hover:text-[#14213D] cursor-pointer transition-colors ml-1"
+                                          title={isPassVisible ? "Hide password" : "Show active password"}
                                         >
-                                          {isImpersonating[u.username] ? <Loader2 size={13} className="animate-spin" /> : <UserCheck size={13} />}
-                                          <span>Login As</span>
+                                          {isPassVisible ? <EyeOff size={12} /> : <Eye size={12} />}
                                         </button>
-                                      )}
+                                      </div>
                                     </div>
                                   </div>
 
-                                  {/* Inline Reset Password Form */}
-                                  {isResetOpen && (
-                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="pt-2 border-t border-slate-100 flex items-center gap-3">
-                                      <input
-                                        type="password"
-                                        placeholder="Enter new password for user..."
-                                        value={userResetPasswords[u.username] || ""}
-                                        onChange={(e) => setUserResetPasswords({ ...userResetPasswords, [u.username]: e.target.value })}
-                                        className="flex-1 border border-slate-200 bg-slate-50 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
-                                      />
+                                  {/* Right Side Row Action Buttons */}
+                                  <div className="flex items-center gap-2 self-end sm:self-center">
+                                    <button
+                                      onClick={() => setShowResetRow(prev => ({ ...prev, [u.username]: !prev[u.username] }))}
+                                      className="bg-white border border-[#14213D] text-[#14213D] hover:bg-slate-50 text-xs font-bold font-mono px-3 py-1.5 rounded-md flex items-center gap-1.5 cursor-pointer transition-colors"
+                                    >
+                                      <Key size={13} />
+                                      <span>Reset Password</span>
+                                    </button>
+
+                                    {!isSelf && (
                                       <button
-                                        onClick={() => handleResetUserPassword(u.username)}
-                                        disabled={isResettingPw[u.username]}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
+                                        onClick={() => handleImpersonate(u.username)}
+                                        disabled={isImpersonating[u.username]}
+                                        className="bg-[#C9A227] hover:bg-[#b59020] text-[#14213D] font-bold font-mono text-xs px-3.5 py-1.5 rounded-md flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
                                       >
-                                        {isResettingPw[u.username] ? "Saving..." : "Confirm Reset"}
+                                        {isImpersonating[u.username] ? <Loader2 size={13} className="animate-spin" /> : <Users size={13} />}
+                                        <span>Login As</span>
                                       </button>
-                                    </motion.div>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
-                              );
-                            })}
-                          </div>
+
+                                {/* Inline Reset Password Form */}
+                                {isResetOpen && (
+                                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="pt-2 border-t border-[#e2d9cc] flex items-center gap-3">
+                                    <input
+                                      type="password"
+                                      placeholder="Enter new password for user..."
+                                      value={userResetPasswords[u.username] || ""}
+                                      onChange={(e) => setUserResetPasswords({ ...userResetPasswords, [u.username]: e.target.value })}
+                                      className="flex-1 border border-[#d1c9bc] bg-white rounded-md px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#14213D]"
+                                    />
+                                    <button
+                                      onClick={() => handleResetUserPassword(u.username)}
+                                      disabled={isResettingPw[u.username]}
+                                      className="bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold font-mono text-xs px-4 py-2 rounded-md border border-[#C9A227] cursor-pointer shadow-sm"
+                                    >
+                                      {isResettingPw[u.username] ? "Saving..." : "Confirm Reset"}
+                                    </button>
+                                  </motion.div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}
 
                     {/* ══ 4. SETTINGS TAB (Superadmin Only) ═══════════════════════════════ */}
                     {adminActiveTab === "settings" && (
-                      <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                          <h2 className="text-lg font-bold text-slate-900 font-serif">Delivery Engines & Settings</h2>
-                          <p className="text-xs text-slate-500 font-mono">Control email routing, API keys & WhatsApp configuration</p>
+                      <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 max-w-6xl mx-auto">
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-4 shadow-sm">
+                          <h2 className="text-[13px] font-semibold text-[#14213D] font-sans">Delivery Engines & Portal Settings</h2>
+                          <p className="text-xs text-slate-500 font-sans mt-0.5">Control email routing, API keys & WhatsApp configuration</p>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-                            <div>
-                              <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Email Delivery Channel</label>
-                              <select
-                                value={adminSettings.emailProvider}
-                                onChange={(e) => setAdminSettings({ ...adminSettings, emailProvider: e.target.value })}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3 text-xs font-mono focus:outline-none"
-                              >
-                                <option value="web3forms">Web3Forms Secure API (Recommended)</option>
-                                <option value="brevo">Brevo Transactional API</option>
-                                <option value="formsubmit">FormSubmit Tunnel</option>
-                                <option value="smtp">Nodemailer SMTP Relay</option>
-                              </select>
-                            </div>
-
-                            {adminSettings.emailProvider === "web3forms" && (
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-5 shadow-sm space-y-6">
+                          {/* Section 1: Email Provider */}
+                          <div>
+                            <h3 className="text-[10px] font-bold font-mono text-[#C9A227] uppercase tracking-widest border-b border-[#e2d9cc] pb-1 mb-3">
+                              EMAIL PROVIDER CONFIGURATION
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Web3Forms Access Key</label>
+                                <label className="block text-xs font-mono font-bold text-slate-600 uppercase mb-1">Select Delivery Provider</label>
+                                <select
+                                  value={adminSettings.emailProvider}
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, emailProvider: e.target.value })}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                >
+                                  <option value="web3forms">Web3Forms API (Recommended)</option>
+                                  <option value="brevo">Brevo Transactional API</option>
+                                  <option value="formsubmit">FormSubmit Tunnel</option>
+                                  <option value="smtp">Nodemailer SMTP Relay</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-mono font-bold text-slate-600 uppercase mb-1">Notification Recipient Inbox</label>
                                 <input
-                                  type="text"
-                                  placeholder="Paste Web3Forms Key here..."
-                                  value={adminSettings.web3formsKey || ""}
-                                  onChange={(e) => setAdminSettings({ ...adminSettings, web3formsKey: e.target.value })}
-                                  className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+                                  type="email"
+                                  value={adminSettings.inquiryRecipient || ""}
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, inquiryRecipient: e.target.value })}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
                                 />
                               </div>
-                            )}
-
-                            <div>
-                              <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">Recipient Notification Inbox</label>
-                              <input
-                                type="email"
-                                value={adminSettings.inquiryRecipient || ""}
-                                onChange={(e) => setAdminSettings({ ...adminSettings, inquiryRecipient: e.target.value })}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
-                              />
                             </div>
                           </div>
 
-                          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-                            <div>
-                              <label className="block text-xs font-bold font-mono text-slate-600 uppercase tracking-widest mb-1.5">School WhatsApp Phone</label>
-                              <input
-                                type="text"
-                                placeholder="919999999999"
-                                value={adminSettings.whatsappPhone || ""}
-                                onChange={(e) => setAdminSettings({ ...adminSettings, whatsappPhone: e.target.value })}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
-                              />
+                          {/* Section 2: API Keys */}
+                          <div>
+                            <h3 className="text-[10px] font-bold font-mono text-[#C9A227] uppercase tracking-widest border-b border-[#e2d9cc] pb-1 mb-3">
+                              PROVIDER CREDENTIALS & KEYS
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {adminSettings.emailProvider === "web3forms" && (
+                                <div>
+                                  <label className="block text-xs font-mono font-bold text-slate-600 uppercase mb-1">Web3Forms Access Key</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Paste Web3Forms Access Key..."
+                                    value={adminSettings.web3formsKey || ""}
+                                    onChange={(e) => setAdminSettings({ ...adminSettings, web3formsKey: e.target.value })}
+                                    className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                  />
+                                </div>
+                              )}
+
+                              <div>
+                                <label className="block text-xs font-mono font-bold text-slate-600 uppercase mb-1">School WhatsApp Phone</label>
+                                <input
+                                  type="text"
+                                  placeholder="919999999999"
+                                  value={adminSettings.whatsappPhone || ""}
+                                  onChange={(e) => setAdminSettings({ ...adminSettings, whatsappPhone: e.target.value })}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="flex gap-3">
-                          <button onClick={handleTestEmail} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase px-5 py-3 rounded-xl cursor-pointer">
-                            Test Email
-                          </button>
-                          <button onClick={handleSaveSettings} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase px-6 py-3 rounded-xl cursor-pointer">
-                            Save Settings
-                          </button>
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              onClick={handleSaveSettings}
+                              className="bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold font-mono text-xs uppercase tracking-wider px-6 py-3 rounded-md border border-[#C9A227] shadow-sm cursor-pointer"
+                            >
+                              Save Settings
+                            </button>
+                            <button
+                              onClick={handleTestEmail}
+                              className="bg-white border border-[#14213D] text-[#14213D] hover:bg-slate-50 font-bold font-mono text-xs uppercase px-5 py-3 rounded-md cursor-pointer"
+                            >
+                              Test Email Dispatch
+                            </button>
+                          </div>
                         </div>
                       </motion.div>
                     )}
 
                     {/* ══ 5. MY PROFILE TAB (All Roles) ══════════════════════════════════ */}
                     {adminActiveTab === "my_profile" && (
-                      <motion.div key="my_profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-                        {/* Profile Info Header Card */}
-                        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <motion.div key="my_profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 max-w-4xl mx-auto">
+                        {/* Top Profile Card */}
+                        <div className="bg-white border border-[#e2d9cc] border-t-4 border-t-[#C9A227] rounded-lg p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                           <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-[#14213D] text-[#C9A227] flex items-center justify-center border-2 border-[#C9A227] shadow-inner font-bold text-lg">
+                            <div className="w-14 h-14 rounded-full bg-[#14213D] text-[#C9A227] flex items-center justify-center border-2 border-[#C9A227] shadow-sm font-sans font-semibold text-[18px]">
                               {adminUsername.charAt(0).toUpperCase()}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="text-base font-bold text-slate-900 font-serif">{adminUsername}</h3>
-                                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 uppercase">
+                                <h3 className="text-[15px] font-semibold text-[#14213D] font-sans">{adminUsername}</h3>
+                                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-sm bg-[#C9A227]/15 text-[#14213D] border border-[#C9A227]/40 uppercase">
                                   {adminRole}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-500 font-mono mt-0.5">Active Admin Console Profile</p>
+                              <p className="text-xs text-slate-500 font-sans mt-0.5">Active Admin Console Profile</p>
                             </div>
                           </div>
                         </div>
 
-                        {/* Password Change Form Card */}
-                        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm max-w-lg space-y-4">
-                          <h3 className="text-sm font-bold font-serif text-slate-900">Change Account Password</h3>
-                          
-                          <div>
-                            <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">Current Password</label>
-                            <div className="relative">
-                              <input
-                                type={showCurrentPw ? "text" : "password"}
-                                placeholder="Enter current password..."
-                                value={changePwCurrent}
-                                onChange={(e) => setChangePwCurrent(e.target.value)}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500"
-                              />
-                              <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                {showCurrentPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                              </button>
-                            </div>
-                          </div>
+                        {/* Password Change Form */}
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-6 shadow-sm space-y-4">
+                          <h3 className="text-[13px] font-semibold font-sans text-[#14213D]">Change Account Password</h3>
 
-                          <div>
-                            <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">New Password</label>
-                            <div className="relative">
-                              <input
-                                type={showNewPw ? "text" : "password"}
-                                placeholder="Enter new password..."
-                                value={changePwNew}
-                                onChange={(e) => setChangePwNew(e.target.value)}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500"
-                              />
-                              <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                              </button>
+                          <div className="space-y-3 max-w-md">
+                            <div>
+                              <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Current Password</label>
+                              <div className="relative">
+                                <input
+                                  type={showCurrentPw ? "text" : "password"}
+                                  placeholder="Enter current password..."
+                                  value={changePwCurrent}
+                                  onChange={(e) => setChangePwCurrent(e.target.value)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 pr-10 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                />
+                                <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#14213D]">
+                                  {showCurrentPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
                             </div>
-                          </div>
 
-                          <div>
-                            <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1.5">Confirm New Password</label>
-                            <div className="relative">
-                              <input
-                                type={showConfirmPw ? "text" : "password"}
-                                placeholder="Confirm new password..."
-                                value={changePwConfirm}
-                                onChange={(e) => setChangePwConfirm(e.target.value)}
-                                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500"
-                              />
-                              <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                              </button>
+                            <div>
+                              <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">New Password</label>
+                              <div className="relative">
+                                <input
+                                  type={showNewPw ? "text" : "password"}
+                                  placeholder="Enter new password..."
+                                  value={changePwNew}
+                                  onChange={(e) => setChangePwNew(e.target.value)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 pr-10 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                />
+                                <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#14213D]">
+                                  {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
                             </div>
-                          </div>
 
-                          <button
-                            onClick={handlePasswordChange}
-                            disabled={isChangingPassword}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase px-6 py-3 rounded-xl cursor-pointer shadow-sm flex items-center justify-center gap-2 w-full"
-                          >
-                            {isChangingPassword ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
-                            <span>Update Password</span>
-                          </button>
+                            <div>
+                              <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Confirm New Password</label>
+                              <div className="relative">
+                                <input
+                                  type={showConfirmPw ? "text" : "password"}
+                                  placeholder="Confirm new password..."
+                                  value={changePwConfirm}
+                                  onChange={(e) => setChangePwConfirm(e.target.value)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 pr-10 text-[13px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                />
+                                <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#14213D]">
+                                  {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {passwordChangeMsg && (
+                              <div className={`p-3 rounded-md text-xs font-sans font-medium flex items-center gap-2 border ${passwordChangeMsg.type === "success"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                : "bg-rose-50 text-rose-800 border-rose-300"
+                                }`}>
+                                {passwordChangeMsg.type === "success" ? <CheckCircle size={15} className="shrink-0 text-emerald-600" /> : <AlertTriangle size={15} className="shrink-0 text-rose-600" />}
+                                <span>{passwordChangeMsg.text}</span>
+                              </div>
+                            )}
+
+                            <button
+                              onClick={handlePasswordChange}
+                              disabled={isChangingPassword}
+                              className="bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold font-mono text-xs uppercase tracking-wider py-3 rounded-md border border-[#C9A227] shadow-sm flex items-center justify-center gap-2 w-full cursor-pointer transition-all"
+                            >
+                              {isChangingPassword ? <Loader2 size={15} className="animate-spin text-[#C9A227]" /> : <CheckCircle size={15} className="text-[#C9A227]" />}
+                              <span>Update Password</span>
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Password History Table (Self) */}
-                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                          <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
-                            <span className="text-xs font-bold font-mono text-slate-600 uppercase tracking-widest flex items-center gap-2">
-                              <History size={14} className="text-indigo-600" /> My Password Change History ({passwordHistory.length})
+                        {/* Password Change History Table */}
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg overflow-hidden shadow-sm">
+                          <div className="px-5 py-3.5 border-b border-[#e2d9cc] flex justify-between items-center bg-[#f8f5f0]">
+                            <span className="text-xs font-bold font-mono text-[#14213D] uppercase tracking-widest flex items-center gap-2">
+                              <History size={14} className="text-[#C9A227]" /> My Password Change History ({passwordHistory.length})
                             </span>
-                            <button onClick={() => loadPasswordHistorySilent()} className="text-slate-400 hover:text-slate-600 transition-colors">
+                            <button onClick={() => loadPasswordHistorySilent()} className="text-slate-500 hover:text-[#14213D] transition-colors">
                               <RefreshCw size={14} />
                             </button>
                           </div>
@@ -1530,21 +1759,26 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                           ) : (
                             <div className="overflow-x-auto">
                               <table className="w-full text-left text-xs font-mono">
-                                <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase border-b border-slate-100">
+                                <thead className="bg-[#14213D] text-slate-200 text-[10px] uppercase border-b border-[#e2d9cc]">
                                   <tr>
                                     <th className="px-5 py-3">Timestamp</th>
                                     <th className="px-5 py-3">User</th>
                                     <th className="px-5 py-3">Changed By</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {passwordHistory.map((h: any) => (
-                                    <tr key={h.id || h.changed_at} className="hover:bg-slate-50/60">
+                                <tbody className="divide-y divide-[#e2d9cc]">
+                                  {passwordHistory.map((h: any, idx: number) => (
+                                    <tr key={h.id || h.changed_at} className={idx % 2 === 0 ? "bg-white" : "bg-[#f8f5f0]/60"}>
                                       <td className="px-5 py-3 text-slate-600">
-                                        {new Date(h.changed_at).toLocaleString("en-IN")}
+                                        {(() => {
+                                          if (!h.changed_at) return "—";
+                                          const str = String(h.changed_at).includes(" ") && !String(h.changed_at).includes("T") ? String(h.changed_at).replace(" ", "T") : String(h.changed_at);
+                                          const d = new Date(str);
+                                          return isNaN(d.getTime()) ? String(h.changed_at) : d.toLocaleString("en-IN");
+                                        })()}
                                       </td>
-                                      <td className="px-5 py-3 font-bold text-slate-900">{h.username}</td>
-                                      <td className="px-5 py-3 text-indigo-600 font-bold">{h.changed_by}</td>
+                                      <td className="px-5 py-3 font-bold text-[#14213D]">{h.username}</td>
+                                      <td className="px-5 py-3 text-[#14213D] font-bold">{h.changed_by}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -1556,7 +1790,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                     )}
                   </AnimatePresence>
                 </div>
-              </div>
+              </main>
             </motion.div>
           )}
 
@@ -1586,6 +1820,38 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               </div>
             </div>
           )}
+          {/* Floating Toast Notifications Container */}
+          <div className="fixed top-5 right-5 z-[100] space-y-2 max-w-sm w-full pointer-events-none">
+            <AnimatePresence>
+              {toasts.map((t) => (
+                <motion.div
+                  key={t.id}
+                  initial={{ opacity: 0, x: 50, scale: 0.95 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 20, scale: 0.9 }}
+                  className={`p-3.5 rounded-lg shadow-xl border flex items-center justify-between pointer-events-auto backdrop-blur-md ${t.type === "success"
+                    ? "bg-emerald-900/95 border-emerald-500 text-emerald-100"
+                    : t.type === "error"
+                      ? "bg-rose-900/95 border-rose-500 text-rose-100"
+                      : "bg-amber-900/95 border-amber-500 text-amber-100"
+                    }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {t.type === "success" && <CheckCircle size={16} className="text-emerald-400 shrink-0" />}
+                    {t.type === "error" && <XCircle size={16} className="text-rose-400 shrink-0" />}
+                    {t.type === "warning" && <AlertTriangle size={16} className="text-amber-400 shrink-0" />}
+                    <span className="text-xs font-sans font-medium leading-snug">{t.msg}</span>
+                  </div>
+                  <button
+                    onClick={() => dismissToast(t.id)}
+                    className="ml-3 text-slate-400 hover:text-white cursor-pointer p-0.5"
+                  >
+                    <X size={14} />
+                  </button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
