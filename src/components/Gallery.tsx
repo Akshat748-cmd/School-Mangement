@@ -300,13 +300,35 @@ export default function Gallery({
 }: GalleryProps) {
   const [galleryFilter, setGalleryFilter] = useState("all");
   const [galleryImgErrors, setGalleryImgErrors] = useState<Record<string, boolean>>({});
+  const [liveItems, setLiveItems] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    fetch("/api/gallery")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.items)) {
+          const mapped = data.items.map((item: any) => ({
+            id: `live-${item.id}`,
+            title: item.title,
+            subtitle: item.subtitle || "",
+            category: item.category || "general",
+            localSrc: item.image_url,
+            fallbackSrc: item.image_url
+          }));
+          setLiveItems(mapped);
+        }
+      })
+      .catch(err => console.error("Error fetching live gallery items:", err));
+  }, []);
+
+  const allCombinedItems = liveItems.length > 0 ? liveItems : galleryItems;
 
   const getDisplayedGalleryItems = () => {
     if (galleryFilter !== "all") {
-      return galleryItems.filter(item => item.category === galleryFilter);
+      return allCombinedItems.filter(item => item.category === galleryFilter);
     }
     const categoriesSeen = new Set<string>();
-    return galleryItems.filter(item => {
+    return allCombinedItems.filter(item => {
       if (categoriesSeen.has(item.category)) {
         return false;
       }

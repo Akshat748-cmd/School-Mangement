@@ -47,7 +47,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     brevoSenderName: "AMPS Portal"
   });
 
-  const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "audit_log" | "users" | "settings" | "my_profile">("inquiries");
+  const [adminActiveTab, setAdminActiveTab] = useState<"inquiries" | "audit_log" | "users" | "settings" | "my_profile" | "announcements" | "gallery" | "events">("inquiries");
   const [adminErrorMsg, setAdminErrorMsg] = useState("");
 
   // ─── Account & Audit States ──────────────────────────────────────────────────
@@ -91,6 +91,45 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // ─── Announcements States ───────────────────────────────────────────────
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [newAnnouncementTitle, setNewAnnouncementTitle] = useState("");
+  const [newAnnouncementContent, setNewAnnouncementContent] = useState("");
+  const [newAnnouncementPriority, setNewAnnouncementPriority] = useState<"high" | "normal" | "low">("normal");
+  const [newAnnouncementExpiresAt, setNewAnnouncementExpiresAt] = useState("");
+  const [isCreatingAnnouncement, setIsCreatingAnnouncement] = useState(false);
+  const [isDeletingAnnouncement, setIsDeletingAnnouncement] = useState<Record<number, boolean>>({});
+
+  // ─── Gallery Manager States ─────────────────────────────────────────────
+  const [galleryManagerItems, setGalleryManagerItems] = useState<any[]>([]);
+  const [newGalleryTitle, setNewGalleryTitle] = useState("");
+  const [newGallerySubtitle, setNewGallerySubtitle] = useState("");
+  const [newGalleryCategory, setNewGalleryCategory] = useState("general");
+  const [newGalleryImageUrl, setNewGalleryImageUrl] = useState("");
+  const [isCreatingGalleryItem, setIsCreatingGalleryItem] = useState(false);
+  const [isDeletingGalleryItem, setIsDeletingGalleryItem] = useState<Record<number, boolean>>({});
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadPhotoBase64, setUploadPhotoBase64] = useState<string>("");
+  const [galleryCategoryTab, setGalleryCategoryTab] = useState<string>("all");
+
+  // ─── Events States ───────────────────────────────────────────────────────
+  const [schoolEvents, setSchoolEvents] = useState<any[]>([]);
+  const [newEventTitle, setNewEventTitle] = useState("");
+  const [newEventDescription, setNewEventDescription] = useState("");
+  const [newEventDate, setNewEventDate] = useState("");
+  const [newEventType, setNewEventType] = useState("general");
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [isDeletingEvent, setIsDeletingEvent] = useState<Record<number, boolean>>({});
+  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [editEventTitle, setEditEventTitle] = useState("");
+  const [editEventDescription, setEditEventDescription] = useState("");
+  const [editEventDate, setEditEventDate] = useState("");
+  const [editEventType, setEditEventType] = useState("general");
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
+
+  // ─── AI Generation States ────────────────────────────────────────────────
+  const [isAIGenerating, setIsAIGenerating] = useState<string | null>(null); // tracks which field is generating
 
   // ─── Toast System ─────────────────────────────────────────────────────────────
   const showToast = useCallback((msg: string, type: Toast["type"] = "success") => {
@@ -150,10 +189,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     if (!token) return;
     try {
       // 1. Fetch Inquiries
-      const inqRes = await fetch("/api/admin/inquiries", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const inqRes = await adminFetch("/api/admin/inquiries", { method: "POST" });
       const inqData = await inqRes.json();
       if (inqRes.ok && inqData.success) {
         setAdminInquiries(inqData.inquiries || []);
@@ -161,27 +197,25 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       }
 
       // 2. Fetch Audit Log
-      loadAuditLogSilent(token);
+      loadAuditLogSilent();
 
       // 3. Fetch Password History
-      loadPasswordHistorySilent(token);
+      loadPasswordHistorySilent();
 
       // 4. Fetch Users (if Superadmin)
       const role = sessionStorage.getItem("admin_role");
       if (role === "Superadmin") {
-        loadAdminUsersSilent(token);
-        loadSettingsSilent(token);
+        loadAdminUsersSilent();
+        loadSettingsSilent();
       }
     } catch (err) {
       console.error("Error loading dashboard data:", err);
     }
-  }, [sessionToken]);
+  }, [sessionToken, adminFetch]);
 
-  const loadAuditLogSilent = async (token = sessionToken) => {
+  const loadAuditLogSilent = async (_token?: string) => {
     try {
-      const res = await fetch("/api/admin/audit-log", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const res = await adminFetch("/api/admin/audit-log");
       const data = await res.json();
       if (res.ok && data.success) setAuditLogList(data.auditLog || []);
     } catch (err) {
@@ -189,11 +223,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
-  const loadPasswordHistorySilent = async (token = sessionToken) => {
+  const loadPasswordHistorySilent = async (_token?: string) => {
     try {
-      const res = await fetch("/api/admin/password-history", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const res = await adminFetch("/api/admin/password-history");
       const data = await res.json();
       if (res.ok && data.success) setPasswordHistory(data.history || []);
     } catch (err) {
@@ -201,11 +233,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
-  const loadAdminUsersSilent = async (token = sessionToken) => {
+  const loadAdminUsersSilent = async (_token?: string) => {
     try {
-      const res = await fetch(`/api/admin/users?t=${Date.now()}`, {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const res = await adminFetch(`/api/admin/users?t=${Date.now()}`);
       const data = await res.json();
       if (res.ok && data.success && Array.isArray(data.users) && data.users.length > 0) {
         setAdminUsersList(data.users);
@@ -228,11 +258,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
-  const loadSettingsSilent = async (token = sessionToken) => {
+  const loadSettingsSilent = async (_token?: string) => {
     try {
-      const res = await fetch("/api/admin/settings", {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const res = await adminFetch("/api/admin/settings");
       const data = await res.json();
       if (res.ok && data.success && data.settings) {
         setAdminSettings(data.settings);
@@ -242,9 +270,318 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     }
   };
 
+  // ─── New Feature Loaders ──────────────────────────────────────────────────
+
+  const loadAnnouncementsSilent = useCallback(async (_token?: string) => {
+    try {
+      const res = await adminFetch("/api/admin/announcements");
+      const data = await res.json();
+      if (res.ok && data.success) setAnnouncements(data.announcements || []);
+    } catch (err) {
+      console.error("Error fetching announcements:", err);
+    }
+  }, [adminFetch]);
+
+  const loadGalleryItemsSilent = useCallback(async (_token?: string) => {
+    try {
+      const res = await adminFetch("/api/admin/gallery");
+      const data = await res.json();
+      if (res.ok && data.success) setGalleryManagerItems(data.items || []);
+    } catch (err) {
+      console.error("Error fetching gallery items:", err);
+    }
+  }, [adminFetch]);
+
+  const loadEventsSilent = useCallback(async (_token?: string) => {
+    try {
+      const res = await adminFetch("/api/admin/events");
+      const data = await res.json();
+      if (res.ok && data.success) setSchoolEvents(data.events || []);
+    } catch (err) {
+      console.error("Error fetching events:", err);
+    }
+  }, [adminFetch]);
+
+  // ─── New Feature Handlers ───────────────────────────────────────────────
+
+  const handleCreateAnnouncement = async () => {
+    if (!newAnnouncementTitle.trim() || !newAnnouncementContent.trim()) {
+      showToast("Title aur content dono required hain.", "warning"); return;
+    }
+    setIsCreatingAnnouncement(true);
+    try {
+      const res = await adminFetch("/api/admin/announcements/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newAnnouncementTitle, content: newAnnouncementContent, priority: newAnnouncementPriority, expires_at: newAnnouncementExpiresAt || null })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Announcement published!", "success");
+        setNewAnnouncementTitle(""); setNewAnnouncementContent(""); setNewAnnouncementPriority("normal"); setNewAnnouncementExpiresAt("");
+        loadAnnouncementsSilent();
+      } else { showToast(data.message || "Failed to publish.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsCreatingAnnouncement(false); }
+  };
+
+  const handleDeleteAnnouncement = async (id: number) => {
+    if (!window.confirm("Delete this announcement?")) return;
+    setIsDeletingAnnouncement(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await adminFetch(`/api/admin/announcements/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok && data.success) { showToast("Announcement deleted.", "warning"); loadAnnouncementsSilent(); }
+      else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsDeletingAnnouncement(prev => ({ ...prev, [id]: false })); }
+  };
+
+  const handleToggleAnnouncement = async (id: number) => {
+    try {
+      const res = await adminFetch(`/api/admin/announcements/${id}/toggle`, { method: "PUT" });
+      const data = await res.json();
+      if (res.ok && data.success) { showToast("Visibility updated.", "success"); loadAnnouncementsSilent(); }
+      else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+  };
+
+  const handleCreateGalleryItem = async () => {
+    if (!newGalleryTitle.trim() || !newGalleryImageUrl.trim()) {
+      showToast("Title aur Image URL required hain.", "warning"); return;
+    }
+    setIsCreatingGalleryItem(true);
+    try {
+      const res = await adminFetch("/api/admin/gallery/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newGalleryTitle, subtitle: newGallerySubtitle, category: newGalleryCategory, image_url: newGalleryImageUrl })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Gallery item added!", "success");
+        setNewGalleryTitle(""); setNewGallerySubtitle(""); setNewGalleryCategory("general"); setNewGalleryImageUrl("");
+        loadGalleryItemsSilent();
+      } else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsCreatingGalleryItem(false); }
+  };
+
+  const handleDeleteGalleryItem = async (id: number) => {
+    if (!window.confirm("Delete this gallery item?")) return;
+    setIsDeletingGalleryItem(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await adminFetch(`/api/admin/gallery/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok && data.success) { showToast("Gallery item deleted.", "warning"); loadGalleryItemsSilent(); }
+      else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsDeletingGalleryItem(prev => ({ ...prev, [id]: false })); }
+  };
+
+  const handleCreateEvent = async () => {
+    if (!newEventTitle.trim() || !newEventDate) {
+      showToast("Title aur Event Date required hain.", "warning"); return;
+    }
+    setIsCreatingEvent(true);
+    try {
+      const res = await adminFetch("/api/admin/events/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newEventTitle, description: newEventDescription, event_date: newEventDate, event_type: newEventType })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Event created!", "success");
+        setNewEventTitle(""); setNewEventDescription(""); setNewEventDate(""); setNewEventType("general");
+        loadEventsSilent();
+      } else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsCreatingEvent(false); }
+  };
+
+  const handleSaveEventEdit = async () => {
+    if (!editEventTitle.trim() || !editEventDate) {
+      showToast("Title aur Date required hain.", "warning"); return;
+    }
+    setIsSavingEvent(true);
+    try {
+      const res = await adminFetch(`/api/admin/events/${editingEventId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editEventTitle, description: editEventDescription, event_date: editEventDate, event_type: editEventType })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Event updated!", "success"); setEditingEventId(null); loadEventsSilent();
+      } else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsSavingEvent(false); }
+  };
+
+  const handleDeleteEvent = async (id: number) => {
+    if (!window.confirm("Delete this event?")) return;
+    setIsDeletingEvent(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await adminFetch(`/api/admin/events/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok && data.success) { showToast("Event deleted.", "warning"); loadEventsSilent(); }
+      else { showToast(data.message || "Failed.", "error"); }
+    } catch (err: any) { showToast(err.message || "Error.", "error"); }
+    finally { setIsDeletingEvent(prev => ({ ...prev, [id]: false })); }
+  };
+
+  const safeJsonResponse = async (res: Response) => {
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const text = await res.text();
+      console.error("[Non-JSON Response]:", res.status, text.substring(0, 200));
+      return { success: false, message: `Server HTTP ${res.status} response was not valid JSON.` };
+    }
+    return await res.json();
+  };
+
+  // ─── AI Generate Handler (with Vision Support) ──────────────────────────
+  const handleAIGenerate = async (
+    fieldId: string,
+    type: "announcement" | "event" | "gallery",
+    prompt: string,
+    onResult: (text: string) => void,
+    extraPayload: Record<string, any> = {}
+  ) => {
+    setIsAIGenerating(fieldId);
+    try {
+      const res = await adminFetch("/api/admin/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, prompt, ...extraPayload })
+      });
+      const data = await safeJsonResponse(res);
+      if (res.ok && data.success) {
+        onResult(data.text);
+        showToast("AI content generated successfully! ✨", "success");
+      } else {
+        showToast(data.message || "AI generation failed.", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "AI error.", "error");
+    } finally {
+      setIsAIGenerating(null);
+    }
+  };
+
+// Fast Client-Side Image Compression (resizes 10MB camera photo to ~120KB in <50ms)
+function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+}
+
+  // ─── Photo Upload Handler (Superfast <100ms + Auto Vision AI) ────────────────
+  const handlePhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      // 1. Instant client-side compression (<50ms)
+      const compressedBase64 = await compressImage(file);
+      setUploadPhotoBase64(compressedBase64);
+
+      // 2. Fast upload (<100ms)
+      const res = await adminFetch("/api/admin/upload-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: compressedBase64,
+          fileName: file.name,
+          mimeType: "image/jpeg"
+        })
+      });
+
+      const data = await safeJsonResponse(res);
+      if (res.ok && data.success) {
+        setNewGalleryImageUrl(data.url);
+        showToast("Photo uploaded! 🖼️ AI is analyzing photo to generate Title & Caption in English...", "success");
+
+        // 3. Auto-trigger Gemini Vision AI for Title & Caption!
+        triggerGalleryVisionAI(data.url, compressedBase64);
+      } else {
+        showToast(data.message || "Photo upload failed.", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Upload error.", "error");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // ─── Auto Vision AI Helper for Title & Caption ──────────────────────────────
+  const triggerGalleryVisionAI = async (url: string, b64?: string) => {
+    setIsAIGenerating("gallery-caption");
+    try {
+      const res = await adminFetch("/api/admin/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "gallery",
+          prompt: "Analyze this school photo carefully.",
+          imageUrl: url,
+          imageBase64: b64 || uploadPhotoBase64
+        })
+      });
+      const data = await safeJsonResponse(res);
+      if (res.ok && data.success) {
+        if (data.title) setNewGalleryTitle(data.title);
+        if (data.caption) setNewGallerySubtitle(data.caption);
+        else if (data.text) setNewGallerySubtitle(data.text);
+        showToast("AI auto-generated Title & Caption in English! ✨ (Feel free to edit them below)", "success");
+      } else {
+        showToast(data.message || "AI Vision failed.", "warning");
+      }
+    } catch (err: any) {
+      console.error("AI Vision Auto Error:", err);
+    } finally {
+      setIsAIGenerating(null);
+    }
+  };
+
   useEffect(() => {
     if (isAdminAuthenticated && sessionToken) {
       loadDashboardData(sessionToken);
+      loadAnnouncementsSilent(sessionToken);
+      loadGalleryItemsSilent(sessionToken);
+      loadEventsSilent(sessionToken);
     }
   }, [isAdminAuthenticated, sessionToken, loadDashboardData]);
 
@@ -674,6 +1011,8 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     ...(canManageUsers ? [{ key: "users", label: "Users", icon: Users, badge: null }] : []),
     ...(canViewSettings ? [{ key: "settings", label: "Settings", icon: Settings, badge: null }] : []),
     { key: "my_profile", label: "My Profile", icon: Key, badge: null },
+    { key: "announcements", label: "Announcements", icon: Bell, badge: announcements.filter((a: any) => a.is_published === 1).length || null },
+    { key: "gallery", label: "Gallery Manager", icon: FileText, badge: null }
   ];
 
   // Role selector options for professional login card selector
@@ -896,9 +1235,8 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
               )}
 
               {/* ─── LEFT SIDEBAR (Navy #14213D) ───────────────────────── */}
-              <aside className={`fixed md:static inset-y-0 left-0 z-40 w-[260px] bg-[#14213D] text-slate-300 flex flex-col justify-between border-r border-[#1a2b4c] shrink-0 h-full transition-transform duration-300 ease-in-out ${
-                isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
-              }`}>
+              <aside className={`fixed md:static inset-y-0 left-0 z-40 w-[260px] bg-[#14213D] text-slate-300 flex flex-col justify-between border-r border-[#1a2b4c] shrink-0 h-full transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+                }`}>
                 <div className="flex flex-col h-full justify-between p-5 overflow-y-auto">
                   <div className="space-y-5">
                     {/* Top School Crest & Title */}
@@ -1003,23 +1341,29 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                     </button>
                     <div>
                       <h1 className="font-sans font-semibold text-[15px] text-[#14213D] leading-snug tracking-tight">
-                      {adminActiveTab === "inquiries" && "Admission & Counselling Leads"}
-                      {adminActiveTab === "audit_log" && "Administrative Audit Trail"}
-                      {adminActiveTab === "users" && "Admin User Accounts"}
-                      {adminActiveTab === "settings" && "Portal Settings & Integration"}
-                      {adminActiveTab === "my_profile" && "Account & Security Profile"}
-                    </h1>
-                    <p className="text-[11px] text-slate-400 font-sans mt-0.5">
-                      {adminActiveTab === "inquiries" && "Manage real-time student inquiries, export data, or trigger calls"}
-                      {adminActiveTab === "audit_log" && "Track authentication, data mutations & system-wide actions"}
-                      {adminActiveTab === "users" && "Manage portal roles, reset passwords, or trigger impersonation"}
-                      {adminActiveTab === "settings" && "Configure email channels, Web3Forms/Brevo API keys & WhatsApp"}
-                      {adminActiveTab === "my_profile" && "Update your account password and view security event logs"}
-                    </p>
+                        {adminActiveTab === "inquiries" && "Admission & Counselling Leads"}
+                        {adminActiveTab === "audit_log" && "Administrative Audit Trail"}
+                        {adminActiveTab === "users" && "Admin User Accounts"}
+                        {adminActiveTab === "settings" && "Portal Settings & Integration"}
+                        {adminActiveTab === "my_profile" && "Account & Security Profile"}
+                        {adminActiveTab === "announcements" && "Notice Board & Announcements"}
+                        {adminActiveTab === "gallery" && "Gallery Manager"}
+                        {adminActiveTab === "events" && "School Events & Calendar"}
+                      </h1>
+                      <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+                        {adminActiveTab === "inquiries" && "Manage real-time student inquiries, export data, or trigger calls"}
+                        {adminActiveTab === "audit_log" && "Track authentication, data mutations & system-wide actions"}
+                        {adminActiveTab === "users" && "Manage portal roles, reset passwords, or trigger impersonation"}
+                        {adminActiveTab === "settings" && "Configure email channels, Web3Forms/Brevo API keys & WhatsApp"}
+                        {adminActiveTab === "my_profile" && "Update your account password and view security event logs"}
+                        {adminActiveTab === "announcements" && "Publish, edit or remove notices that appear live on the website"}
+                        {adminActiveTab === "gallery" && "Add or remove photos from the live website gallery"}
+                        {adminActiveTab === "events" && "Create and manage school events, exams, holidays & important dates"}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
                     {/* Impersonation Banner in Header */}
                     {impersonatedBy && (
                       <div className="bg-amber-500/10 border border-amber-500/30 text-amber-900 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-sans font-bold">
@@ -1788,6 +2132,376 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                         </div>
                       </motion.div>
                     )}
+
+                    {/* ══ 6. ANNOUNCEMENTS TAB ═══════════════════════════════════════════ */}
+                    {adminActiveTab === "announcements" && (
+                      <motion.div key="announcements" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 max-w-4xl mx-auto">
+
+                        {/* Create New Announcement */}
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-5 shadow-sm space-y-4">
+                          <h3 className="text-[13px] font-semibold text-[#14213D] font-sans flex items-center gap-2">
+                            <Bell size={16} className="text-[#C9A227]" /> Publish New Notice / Announcement
+                          </h3>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Title *</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. School Closed — Winter Vacation"
+                                value={newAnnouncementTitle}
+                                onChange={e => setNewAnnouncementTitle(e.target.value)}
+                                className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-sans text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Content *</label>
+                              <textarea
+                                rows={3}
+                                placeholder="Write announcement details here..."
+                                value={newAnnouncementContent}
+                                onChange={e => setNewAnnouncementContent(e.target.value)}
+                                className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-sans text-[#14213D] focus:outline-none focus:border-[#14213D] resize-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAIGenerate(
+                                  "ann-content",
+                                  "announcement",
+                                  newAnnouncementTitle || "Write a general school announcement",
+                                  (text) => setNewAnnouncementContent(text)
+                                )}
+                                disabled={isAIGenerating === "ann-content"}
+                                className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold font-mono px-3 py-1.5 rounded-md bg-[#C9A227]/10 border border-[#C9A227]/60 text-[#856a10] hover:bg-[#C9A227]/20 cursor-pointer transition-all disabled:opacity-60"
+                              >
+                                {isAIGenerating === "ann-content" ? <Loader2 size={12} className="animate-spin" /> : <span>✨</span>}
+                                {isAIGenerating === "ann-content" ? "Generating with AI..." : "✨ Auto-Generate Notice with AI"}
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                              <div className="flex-1 min-w-[140px]">
+                                <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Priority</label>
+                                <select value={newAnnouncementPriority} onChange={e => setNewAnnouncementPriority(e.target.value as any)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[12px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]">
+                                  <option value="high">🔴 High Priority</option>
+                                  <option value="normal">🟡 Normal</option>
+                                  <option value="low">🟢 Low Priority</option>
+                                </select>
+                              </div>
+                              <div className="flex-1 min-w-[160px]">
+                                <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Expires At (optional)</label>
+                                <input type="date" value={newAnnouncementExpiresAt} onChange={e => setNewAnnouncementExpiresAt(e.target.value)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[12px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]" />
+                              </div>
+                            </div>
+                            <button onClick={handleCreateAnnouncement} disabled={isCreatingAnnouncement}
+                              className="bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold font-mono text-xs uppercase tracking-wider py-2.5 px-5 rounded-md border border-[#C9A227] shadow-sm flex items-center gap-2 cursor-pointer transition-all disabled:opacity-60">
+                              {isCreatingAnnouncement ? <Loader2 size={14} className="animate-spin text-[#C9A227]" /> : <CheckCircle size={14} className="text-[#C9A227]" />}
+                              <span>Publish Announcement</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Existing Announcements List */}
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg shadow-sm overflow-hidden">
+                          <div className="px-5 py-3.5 border-b border-[#e2d9cc] flex items-center justify-between bg-[#f8f5f0]">
+                            <span className="text-xs font-bold font-mono text-[#14213D] uppercase tracking-widest">All Announcements ({announcements.length})</span>
+                            <button onClick={() => loadAnnouncementsSilent()} className="text-slate-500 hover:text-[#14213D] transition-colors"><RefreshCw size={14} /></button>
+                          </div>
+                          {announcements.length === 0 ? (
+                            <div className="p-10 text-center text-xs font-mono text-slate-400">
+                              <Bell size={28} className="mx-auto text-slate-200 mb-2" />
+                              No announcements published yet. Create your first notice above!
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-[#e2d9cc]">
+                              {announcements.map((ann: any) => (
+                                <div key={ann.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#fffdf7] transition-colors">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${ann.priority === "high" ? "bg-rose-100 text-rose-800 border-rose-300" :
+                                          ann.priority === "low" ? "bg-slate-100 text-slate-600 border-slate-300" :
+                                            "bg-amber-100 text-amber-800 border-amber-300"
+                                        }`}>{ann.priority}</span>
+                                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${ann.is_published === 1 ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-slate-100 text-slate-500 border-slate-300"
+                                        }`}>{ann.is_published === 1 ? "Live" : "Hidden"}</span>
+                                    </div>
+                                    <h4 className="text-[13px] font-semibold text-[#14213D] font-sans truncate">{ann.title}</h4>
+                                    <p className="text-[11px] text-slate-500 font-sans mt-0.5 line-clamp-2">{ann.content}</p>
+                                    <p className="text-[10px] text-slate-400 font-mono mt-1">
+                                      By {ann.created_by} &bull; {new Date(ann.created_at).toLocaleDateString("en-IN")}
+                                      {ann.expires_at && ` · Expires: ${new Date(ann.expires_at).toLocaleDateString("en-IN")}`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button onClick={() => handleToggleAnnouncement(ann.id)}
+                                      className="text-[10px] font-bold px-3 py-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer transition-colors">
+                                      {ann.is_published === 1 ? "Hide" : "Show"}
+                                    </button>
+                                    <button onClick={() => handleDeleteAnnouncement(ann.id)} disabled={isDeletingAnnouncement[ann.id]}
+                                      className="text-[10px] font-bold px-3 py-1.5 rounded-md border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer transition-colors flex items-center gap-1">
+                                      {isDeletingAnnouncement[ann.id] ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* ══ 7. GALLERY MANAGER TAB ═════════════════════════════════════════ */}
+                    {adminActiveTab === "gallery" && (
+                      <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 max-w-4xl mx-auto">
+
+                        {/* Create Gallery Item Form */}
+                        <div className="bg-white border border-[#e2d9cc] rounded-lg p-5 shadow-sm space-y-4">
+                          <h3 className="text-[13px] font-semibold text-[#14213D] font-sans flex items-center gap-2">
+                            <FileText size={16} className="text-[#C9A227]" /> Add New Gallery Photo
+                          </h3>
+
+                          <div className="space-y-4">
+                            {/* STEP 1: IMAGE SELECTION / UPLOAD (REQUIRED FIRST) */}
+                            <div className="bg-[#FAF8F5] p-4 rounded-lg border border-[#E8E2D9] space-y-3">
+                              <label className="block text-[11px] font-bold font-mono text-[#14213D] uppercase tracking-widest flex items-center gap-2">
+                                <span>📸 Step 1: Select / Upload Photo *</span>
+                              </label>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Option A: Computer File Upload */}
+                                <div className="bg-white p-3 rounded-md border border-dashed border-[#C9A227]/60 flex flex-col items-center justify-center text-center">
+                                  <label className="cursor-pointer w-full flex flex-col items-center">
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={handlePhotoFileUpload}
+                                      className="hidden"
+                                      disabled={isUploadingPhoto}
+                                    />
+                                    {isUploadingPhoto ? (
+                                      <div className="flex items-center gap-2 text-xs font-mono text-[#C9A227] py-2">
+                                        <Loader2 size={16} className="animate-spin" /> Uploading photo...
+                                      </div>
+                                    ) : (
+                                      <div className="py-1.5 space-y-1">
+                                        <div className="w-8 h-8 rounded-full bg-[#C9A227]/10 text-[#856a10] flex items-center justify-center mx-auto font-mono text-sm font-bold">
+                                          📁
+                                        </div>
+                                        <span className="text-xs font-bold font-mono text-[#14213D] block">
+                                          Upload Photo from Device
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 font-sans block">
+                                          JPG, PNG, WEBP (Max 10MB)
+                                        </span>
+                                      </div>
+                                    )}
+                                  </label>
+                                </div>
+
+                                {/* Option B: Image URL Link */}
+                                <div className="bg-white p-3 rounded-md border border-[#d1c9bc] flex flex-col justify-center">
+                                  <label className="block text-[9px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">
+                                    Or Paste Image Link (URL)
+                                  </label>
+                                  <input
+                                    type="url"
+                                    placeholder="https://example.com/photo.jpg"
+                                    value={newGalleryImageUrl}
+                                    onChange={e => setNewGalleryImageUrl(e.target.value)}
+                                    className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2 text-[12px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Image Preview Box */}
+                              {newGalleryImageUrl && (
+                                <div className="flex items-center gap-3 p-2 bg-white rounded-md border border-[#e2d9cc] mt-2">
+                                  <img
+                                    src={newGalleryImageUrl}
+                                    alt="Uploaded Preview"
+                                    onError={e => (e.currentTarget.style.display = "none")}
+                                    className="h-20 w-24 rounded object-cover border border-[#d1c9bc] shrink-0"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-[10px] font-bold font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                                      ✓ Photo Ready
+                                    </span>
+                                    <p className="text-[11px] text-slate-500 font-mono truncate mt-1">
+                                      {newGalleryImageUrl}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* STEP 2: TITLE & CATEGORY */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Title *</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Annual Day Celebration 2026"
+                                  value={newGalleryTitle}
+                                  onChange={e => setNewGalleryTitle(e.target.value)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-sans text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">Category</label>
+                                <select
+                                  value={newGalleryCategory}
+                                  onChange={e => setNewGalleryCategory(e.target.value)}
+                                  className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[12px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                                >
+                                  <option value="general">General</option>
+                                  <option value="milestones">Toppers & Milestones</option>
+                                  <option value="awards">Award Ceremonies</option>
+                                  <option value="sports">Sports & Fitness</option>
+                                  <option value="cultural">Cultural Events</option>
+                                  <option value="science">Science & Labs</option>
+                                  <option value="news">News Coverage</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* STEP 3: SUBTITLE / CAPTION (AI MULTIMODAL VISION) */}
+                            <div>
+                              <label className="block text-[10px] font-bold font-mono text-slate-500 uppercase tracking-widest mb-1">
+                                Subtitle / Caption (Editable)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Enter description or upload a photo in Step 1 to auto-generate with AI Vision ↓"
+                                value={newGallerySubtitle}
+                                onChange={e => setNewGallerySubtitle(e.target.value)}
+                                className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[13px] font-sans text-[#14213D] focus:outline-none focus:border-[#14213D]"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => triggerGalleryVisionAI(newGalleryImageUrl)}
+                                disabled={isAIGenerating === "gallery-caption" || !newGalleryImageUrl}
+                                className="mt-2 flex items-center gap-1.5 text-[11px] font-bold font-mono px-3.5 py-2 rounded-md bg-[#C9A227]/15 border border-[#C9A227] text-[#856a10] hover:bg-[#C9A227]/25 cursor-pointer transition-all disabled:opacity-50"
+                              >
+                                {isAIGenerating === "gallery-caption" ? <Loader2 size={13} className="animate-spin text-[#C9A227]" /> : <span>👁️✨</span>}
+                                {isAIGenerating === "gallery-caption"
+                                  ? "AI is analyzing photo to generate Title & Caption..."
+                                  : !newGalleryImageUrl
+                                  ? "Please select or upload a photo in Step 1 first"
+                                  : "✨ Auto-Generate Title & Caption with AI Vision"}
+                              </button>
+                            </div>
+
+                            {/* SUBMIT BUTTON */}
+                            <button
+                              onClick={handleCreateGalleryItem}
+                              disabled={isCreatingGalleryItem}
+                              className="bg-[#14213D] hover:bg-[#1e2f54] text-white font-bold font-mono text-xs uppercase tracking-wider py-2.5 px-6 rounded-md border border-[#C9A227] shadow-sm flex items-center gap-2 cursor-pointer transition-all disabled:opacity-60"
+                            >
+                              {isCreatingGalleryItem ? <Loader2 size={14} className="animate-spin text-[#C9A227]" /> : <CheckCircle size={14} className="text-[#C9A227]" />}
+                              <span>Add to Gallery</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Gallery Grid with Category Filter Tabs */}
+                        {(() => {
+                          const galleryTabs = [
+                            { id: "all", label: "All Photos" },
+                            { id: "milestones", label: "Toppers & Milestones" },
+                            { id: "awards", label: "Award Ceremonies" },
+                            { id: "sports", label: "Sports & Fitness" },
+                            { id: "cultural", label: "Cultural Events" },
+                            { id: "science", label: "Science & Labs" },
+                            { id: "news", label: "News Coverage" }
+                          ];
+
+                          const displayGalleryList = galleryCategoryTab === "all"
+                            ? galleryManagerItems
+                            : galleryManagerItems.filter((item: any) =>
+                                galleryCategoryTab === "milestones"
+                                  ? ["milestones", "academic"].includes(item.category)
+                                  : item.category === galleryCategoryTab
+                              );
+
+                          return (
+                            <div className="bg-white border border-[#e2d9cc] rounded-lg shadow-sm overflow-hidden">
+                              {/* Header Row */}
+                              <div className="px-5 py-3.5 border-b border-[#e2d9cc] flex items-center justify-between bg-[#f8f5f0]">
+                                <span className="text-xs font-bold font-mono text-[#14213D] uppercase tracking-widest">
+                                  Gallery Items ({displayGalleryList.length} of {galleryManagerItems.length})
+                                </span>
+                                <button onClick={() => loadGalleryItemsSilent()} className="text-slate-500 hover:text-[#14213D] transition-colors"><RefreshCw size={14} /></button>
+                              </div>
+
+                              {/* Category Filter Pills (matching website tabs) */}
+                              <div className="flex flex-wrap items-center gap-1.5 p-3 bg-[#f8f5f0]/80 border-b border-[#e2d9cc]">
+                                {galleryTabs.map(tab => {
+                                  const count = galleryManagerItems.filter((i: any) =>
+                                    tab.id === "all"
+                                      ? true
+                                      : tab.id === "milestones"
+                                      ? ["milestones", "academic"].includes(i.category)
+                                      : i.category === tab.id
+                                  ).length;
+
+                                  return (
+                                    <button
+                                      key={tab.id}
+                                      onClick={() => setGalleryCategoryTab(tab.id)}
+                                      className={`px-3 py-1.5 rounded-md text-[10px] font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1.5 ${
+                                        galleryCategoryTab === tab.id
+                                          ? "bg-[#14213D] text-white shadow-sm"
+                                          : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-100"
+                                      }`}
+                                    >
+                                      <span>{tab.label}</span>
+                                      <span className={`px-1.5 py-0.2 rounded-full text-[9px] ${
+                                        galleryCategoryTab === tab.id ? "bg-[#C9A227] text-[#14213D]" : "bg-slate-100 text-slate-600"
+                                      }`}>{count}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Gallery Items List */}
+                              {displayGalleryList.length === 0 ? (
+                                <div className="p-10 text-center text-xs font-mono text-slate-400">
+                                  <FileText size={28} className="mx-auto text-slate-200 mb-2" />
+                                  No photos found in this category. Upload a photo or select another tab above!
+                                </div>
+                              ) : (
+                                <div className="divide-y divide-[#e2d9cc]">
+                                  {displayGalleryList.map((item: any) => (
+                                    <div key={item.id} className="px-5 py-4 flex items-center justify-between gap-4 hover:bg-[#fffdf7] transition-colors">
+                                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <img src={item.image_url} alt={item.title}
+                                          onError={e => { e.currentTarget.src = "https://via.placeholder.com/60x60?text=Img"; }}
+                                          className="w-14 h-14 rounded-md object-cover border border-[#e2d9cc] shrink-0" />
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className="text-[13px] font-semibold text-[#14213D] font-sans truncate">{item.title}</h4>
+                                            <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-300">{item.category}</span>
+                                          </div>
+                                          {item.subtitle && <p className="text-[11px] text-slate-500 font-sans mt-0.5 truncate">{item.subtitle}</p>}
+                                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">By {item.created_by} &bull; {new Date(item.created_at).toLocaleDateString("en-IN")}</p>
+                                        </div>
+                                      </div>
+                                      <button onClick={() => handleDeleteGalleryItem(item.id)} disabled={isDeletingGalleryItem[item.id]}
+                                        className="text-[10px] font-bold px-3 py-1.5 rounded-md border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer transition-colors flex items-center gap-1 shrink-0">
+                                        {isDeletingGalleryItem[item.id] ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                        Delete
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </motion.div>
+                    )}
+
                   </AnimatePresence>
                 </div>
               </main>

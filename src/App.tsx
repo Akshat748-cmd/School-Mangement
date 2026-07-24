@@ -77,6 +77,82 @@ const childVariants = {
   }
 };
 
+// Helper function to render notice content in exact Card 2 bulleted format
+function renderFormattedNoticeContent(text: string) {
+  if (!text) return null;
+
+  // Split by newlines or bullet characters
+  const rawLines = text.split(/\n+/).map(l => l.trim()).filter(l => l.length > 0 && l !== "•");
+
+  if (rawLines.length > 1) {
+    return (
+      <ul className="text-muted-text text-sm space-y-2 mb-4 leading-relaxed font-sans text-left">
+        {rawLines.map((line, idx) => {
+          const cleanLine = line.replace(/^[•\-\*]\s*/, "");
+          const colonIdx = cleanLine.indexOf(":");
+          if (colonIdx > 0 && colonIdx < 35) {
+            const key = cleanLine.substring(0, colonIdx);
+            const val = cleanLine.substring(colonIdx + 1);
+            return (
+              <li key={idx} className="flex items-start gap-2">
+                <span className="text-brass-gold mt-1 font-bold shrink-0">·</span>
+                <span>
+                  <strong className="text-ink-navy font-semibold">{key}:</strong>
+                  {val}
+                </span>
+              </li>
+            );
+          }
+          return (
+            <li key={idx} className="flex items-start gap-2">
+              <span className="text-brass-gold mt-1 font-bold shrink-0">·</span>
+              <span>{cleanLine}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  // Single paragraph text - format into bullet points cleanly
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  if (sentences.length > 1) {
+    return (
+      <ul className="text-muted-text text-sm space-y-2 mb-4 leading-relaxed font-sans text-left">
+        {sentences.slice(0, 4).map((st, idx) => {
+          const cleanSt = st.trim();
+          const colonIdx = cleanSt.indexOf(":");
+          if (colonIdx > 0 && colonIdx < 30) {
+            const key = cleanSt.substring(0, colonIdx);
+            const val = cleanSt.substring(colonIdx + 1);
+            return (
+              <li key={idx} className="flex items-start gap-2">
+                <span className="text-brass-gold mt-1 font-bold shrink-0">·</span>
+                <span>
+                  <strong className="text-ink-navy font-semibold">{key}:</strong>
+                  {val}
+                </span>
+              </li>
+            );
+          }
+          return (
+            <li key={idx} className="flex items-start gap-2">
+              <span className="text-brass-gold mt-1 font-bold shrink-0">·</span>
+              <span>{cleanSt}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  return (
+    <p className="text-muted-text text-sm leading-relaxed mb-4 text-left font-sans">
+      {text}
+    </p>
+  );
+}
+
 // Lazy load AdminPanel
 const AdminPanel = React.lazy(() => import("./components/AdminPanel"));
 
@@ -93,6 +169,18 @@ export default function App() {
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [inquiryPresetMessage, setInquiryPresetMessage] = useState("");
   const [inquiryFormContext, setInquiryFormContext] = useState<"admission" | "counselling">("admission");
+  const [liveAnnouncements, setLiveAnnouncements] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    fetch("/api/announcements")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.announcements)) {
+          setLiveAnnouncements(data.announcements);
+        }
+      })
+      .catch(err => console.error("Error fetching live announcements:", err));
+  }, []);
 
   const handleOpenAdmissionInquiry = () => {
     setInquiryFormContext("admission");
@@ -173,6 +261,71 @@ export default function App() {
           <div className="absolute inset-0 bg-opacity-5 pointer-events-none bg-[radial-gradient(#C9A227_1px,transparent_1px)] [background-size:16px_16px] opacity-10"></div>
 
           <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 lg:gap-10">
+
+            {/* LIVE ANNOUNCEMENTS FROM ADMIN PANEL (SORTED BY PRIORITY) */}
+            {[...liveAnnouncements]
+              .sort((a, b) => {
+                const pOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
+                const pA = pOrder[a.priority] ?? 1;
+                const pB = pOrder[b.priority] ?? 1;
+                if (pA !== pB) return pA - pB;
+                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+              })
+              .map((ann: any, index: number) => {
+                const isHigh = ann.priority === "high";
+                const isLow = ann.priority === "low";
+
+                const priorityBadge = isHigh ? "URGENT NOTICE" : isLow ? "NOTICE" : "SCHOOL ANNOUNCEMENT";
+                const priorityColor = isHigh ? "text-rose-800 bg-rose-100 border-rose-300 font-extrabold" :
+                                      isLow ? "text-slate-700 bg-slate-100 border-slate-300 font-bold" :
+                                      "text-maroon bg-maroon/10 border-maroon/30 font-bold";
+
+                const cardBorder = isHigh ? "border-2 border-rose-400 shadow-rose-100" : "border border-border-custom";
+                const pinBg = isHigh ? "bg-rose-600" : "bg-maroon";
+
+                return (
+                  <motion.div
+                    key={ann.id || index}
+                    whileHover={{ rotate: 0, y: -8, scale: 1.01 }}
+                    initial={{ rotate: index % 2 === 0 ? -1 : 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                    className={`bg-white p-4 pt-6 pb-5 sm:p-6 sm:pt-10 sm:pb-8 rounded-sm shadow-md ${cardBorder} relative transition-shadow hover:shadow-xl flex flex-col justify-between text-slate-800`}
+                  >
+                    {/* Wooden / Red Pin Accent */}
+                    <div className={`absolute top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full ${pinBg} shadow-sm border border-black/10 flex items-center justify-center`}>
+                      <div className="w-1.5 h-1.5 rounded-full bg-brass-gold"></div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className={`font-mono text-[9px] tracking-widest uppercase px-2 py-0.5 rounded border ${priorityColor}`}>
+                          {priorityBadge}
+                        </span>
+                        <span className="font-mono text-[9px] text-muted-text font-semibold">
+                          {new Date(ann.created_at || Date.now()).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+
+                      <h3 className="font-serif text-xl text-ink-navy font-bold mb-3 text-left">
+                        {ann.title}
+                      </h3>
+
+                      {/* Render Structured Bulleted Content */}
+                      {renderFormattedNoticeContent(ann.content)}
+                    </div>
+
+                    <div className="pt-4 border-t border-dashed border-border-custom flex items-center justify-between text-[10px] font-mono text-muted-text">
+                      <span>Published by <strong className="text-ink-navy">{ann.created_by || "Admin"}</strong></span>
+                      <button
+                        onClick={handleOpenAdmissionInquiry}
+                        className="font-mono text-[11px] text-maroon hover:text-ink-navy font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        Inquire <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
 
             {/* CARD 1: Admission Open 2026–27 */}
             <motion.div

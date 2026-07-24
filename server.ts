@@ -202,6 +202,48 @@ async function initializeDatabase() {
       )
     `);
 
+    // ─── NEW: Announcements Table ─────────────────────────────────────────────
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        priority TEXT DEFAULT 'normal',
+        is_published INTEGER DEFAULT 1,
+        created_by TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT DEFAULT NULL
+      )
+    `);
+
+    // ─── NEW: Gallery Items Table ─────────────────────────────────────────────
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS gallery_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        subtitle TEXT DEFAULT '',
+        category TEXT DEFAULT 'general',
+        image_url TEXT NOT NULL,
+        is_published INTEGER DEFAULT 1,
+        created_by TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+
+    // ─── NEW: School Events Table ─────────────────────────────────────────────
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        event_date TEXT NOT NULL,
+        event_type TEXT DEFAULT 'general',
+        is_published INTEGER DEFAULT 1,
+        created_by TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+
     // Ensure columns exist on existing databases (Schema Migrations)
     const migrationQueries = [
       "ALTER TABLE admin_sessions ADD COLUMN username TEXT",
@@ -311,10 +353,87 @@ async function initializeDatabase() {
           sql: "UPDATE admin_users SET password_hash = ? WHERE LOWER(username) = ?",
           args: [hash, u.username.toLowerCase()]
         });
+        await db.execute({
+          sql: "INSERT INTO password_history (username, changed_at, changed_by) VALUES (?, datetime('now'), 'system')",
+          args: [u.username]
+        });
+      }
+    }
+    console.log("[DB] Admin users seeded successfully: superadmin, chairman, administrator, principal");
+
+    // ─── Seed Initial Gallery Items if Missing ────────────────────────
+    console.log("[DB Seed] Verifying gallery photos in database...");
+    const defaultGallery = [
+      { title: "Dainik Bhaskar Merit Feature", subtitle: "Dainik Bhaskar newspaper clipping covering top merit rankers.", category: "news", image_url: "/assets/news-1.jpeg" },
+      { title: "Earth Day Group Exhibition", subtitle: "Students holding globe model and awareness posters.", category: "news", image_url: "/assets/news-2.jpeg" },
+      { title: "School Staff News Portrait", subtitle: "Group photograph of school faculty members.", category: "news", image_url: "/assets/news-3.jpg" },
+      { title: "Academic Excellence Felicitation", subtitle: "Outstanding student scholars being honored with medals.", category: "awards", image_url: "/assets/award-1.jpg" },
+      { title: "Annual Day Excellence Awards", subtitle: "School management presenting achievement shields and trophies.", category: "awards", image_url: "/assets/award-2.jpg" },
+      { title: "Board Merit Position Winners", subtitle: "Chief guests presenting certificates of merit.", category: "awards", image_url: "/assets/award-4.jpeg" },
+      { title: "Meritorious Scholar Award Distribution", subtitle: "School patron presenting trophy and scholarship certificate.", category: "awards", image_url: "/assets/award.jpeg" },
+      { title: "Annual Sports Day Athletics", subtitle: "Students competing in track-and-field sprint races.", category: "sports", image_url: "/assets/sports-1.jpg" },
+      { title: "Physical Development Events", subtitle: "Active track meets and student athletics.", category: "sports", image_url: "/assets/sports-2.jpg" },
+      { title: "Daily Morning Prayer & Assembly", subtitle: "Disciplined queues of senior and junior students standing together.", category: "cultural", image_url: "/assets/cultural-1.jpg" },
+      { title: "School Gathering & Assembly Prayers", subtitle: "Peaceful morning session with students and faculty.", category: "cultural", image_url: "/assets/cultural-2.jpg" },
+      { title: "Outdoor Sitting Assembly & Discourse", subtitle: "Students seated in organized rows during moral lecture.", category: "cultural", image_url: "/assets/cultural-3.jpg" },
+      { title: "Kindergarten Welcome Performance", subtitle: "Kindergarten students in uniform holding welcome cutouts.", category: "cultural", image_url: "/assets/cultural-4.jpg" },
+      { title: "Saraswati Puja Devotional Ceremony", subtitle: "Devotional prayer session seeking knowledge.", category: "cultural", image_url: "/assets/cultural-5.jpeg" },
+      { title: "Student Showcasing Exhibition Model", subtitle: "Town-planning model and geography project.", category: "science", image_url: "/assets/science-fair-1.jpg" },
+      { title: "District Science Seminar Winners", subtitle: "High-school students holding certificates of achievement.", category: "science", image_url: "/assets/science-fair-2.jpg" },
+      { title: "Patriotic Painting & Poster Exhibition", subtitle: "Student proudly displaying tricolor artwork.", category: "science", image_url: "/assets/science-fair-3.jpeg" },
+      { title: "Board Merit Position Topper", subtitle: "Celebrating top district ranker in Rajasthan Board exams.", category: "milestones", image_url: "/assets/top-1.jpeg" },
+      { title: "State Board Rank Achievers", subtitle: "Honoring top-scoring board examination scholars.", category: "milestones", image_url: "/assets/top-2.jpeg" },
+      { title: "NEET 2025 Exam Achievers", subtitle: "Future medical professionals qualifying NEET 2025.", category: "milestones", image_url: "/assets/top-3.jpeg" },
+      { title: "JEE Advanced 2025 Toppers", subtitle: "Engineering aspirants qualifying JEE Advanced.", category: "milestones", image_url: "/assets/top-4.jpeg" },
+      { title: "Fancy Dress Competition", subtitle: "Kindergarten and primary students in creative costumes.", category: "cultural", image_url: "/assets/cultural-6.jpeg" },
+      { title: "Independence Day Festivities", subtitle: "Patriotic programs and flag hoisting celebrations.", category: "cultural", image_url: "/assets/cultural-7.jpeg" },
+      { title: "Annual Drama and Stage Play", subtitle: "Students enacting theatrical play on social values.", category: "cultural", image_url: "/assets/cultural-8.jpeg" },
+      { title: "Guru Vandan Chhatra Abhinandan", subtitle: "Felicitation program to honor dedicated educators.", category: "cultural", image_url: "/assets/cultural-9.jpeg" },
+      { title: "Rajasthan Patrika Merit Feature", subtitle: "Press clipping celebrating board toppers.", category: "news", image_url: "/assets/news-4.jpeg" },
+      { title: "Academic Milestone Announcement", subtitle: "Local media covering high success rate of AMPS.", category: "news", image_url: "/assets/news-5.jpeg" },
+      { title: "District Science Fair Victory Feature", subtitle: "Press clipping celebrating triumph in science fair.", category: "news", image_url: "/assets/news-6.jpeg" },
+      { title: "Board Merit Distinction Ranker", subtitle: "Top achievers scoring high honors in board exams.", category: "milestones", image_url: "/assets/top-5.jpeg" },
+      { title: "NEET Exam Success Achievers", subtitle: "Celebrating AIR 617 Piyush Bansal and medical achievers.", category: "milestones", image_url: "/assets/neet.jpeg" },
+      { title: "Innovative Science Exhibition Stalls", subtitle: "Physics and mechanical projects at exhibition booths.", category: "science", image_url: "/assets/science-fair-4.jpg.jpeg" },
+      { title: "Electronics & Robotics Demonstrations", subtitle: "Smart sensor projects and circuit board integrations.", category: "science", image_url: "/assets/science-fair-5.jpg.jpeg" },
+      { title: "Interactive Working Science Models", subtitle: "Students explaining mechanical workings to visitors.", category: "science", image_url: "/assets/science-fair-6.jpg.jpeg" },
+      { title: "Science Exhibition Welcome & Presentation", subtitle: "Welcome counter with experimental modules.", category: "science", image_url: "/assets/science-fair-7.jpg.jpeg" },
+      { title: "Smart City & Infrastructure Working Model", subtitle: "Green city model featuring smart road grids.", category: "science", image_url: "/assets/science-fair-8.jpg.jpeg" }
+    ];
+
+    for (const item of defaultGallery) {
+      const existing = await db.execute({
+        sql: "SELECT id FROM gallery_items WHERE title = ? OR image_url = ?",
+        args: [item.title, item.image_url]
+      });
+      if (existing.rows.length === 0) {
+        await db.execute({
+          sql: `INSERT INTO gallery_items (title, subtitle, category, image_url, is_published, created_by, created_at)
+                VALUES (?, ?, ?, ?, 1, 'system', datetime('now'))`,
+          args: [item.title, item.subtitle, item.category, item.image_url]
+        });
       }
     }
 
-    console.log("[DB] Admin users seeded successfully: superadmin, chairman, administrator, principal");
+    // ─── Seed Initial Announcements if Table is Empty ────────────────────────
+    const annCountRes = await db.execute("SELECT COUNT(*) as cnt FROM announcements");
+    const annCount = Number((annCountRes.rows[0] as any)?.cnt || 0);
+    if (annCount === 0) {
+      console.log("[DB Seed] Seeding initial announcements into database...");
+      const defaultAnn = [
+        { title: "Admissions Open for Academic Session 2026-27", content: "Registration forms are now available at the school reception and online portal for Nursery to Class XII. Limited seats available.", priority: "high" },
+        { title: "Annual Sports Meet & Athletics Championship", content: "Inter-house track and field events scheduled for all primary, middle, and senior wing students. House captains coordinate entries.", priority: "normal" },
+        { title: "Parents-Teacher Meeting (PTM)", content: "Term evaluation PTM will be conducted on Saturday. Parents are cordially invited to interact with class mentors.", priority: "normal" }
+      ];
+      for (const a of defaultAnn) {
+        await db.execute({
+          sql: `INSERT INTO announcements (title, content, priority, is_published, created_by, created_at)
+                VALUES (?, ?, ?, 1, 'system', datetime('now'))`,
+          args: [a.title, a.content, a.priority]
+        });
+      }
+    }
+
     await updateCredentialsFile();
   } catch (err: any) {
     console.error("[DB Init Error]:", err.message);
@@ -600,9 +719,8 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   const bootConfig = await getResolvedConfig();
-  console.log(`[Config] Server booted. Selected Email Provider: '${bootConfig.emailProvider}'`);
-
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // ─── PUBLIC INQUIRY API ──────────────────────────────────────────────────
   app.post("/api/inquiries", async (req, res) => {
@@ -1175,6 +1293,380 @@ async function startServer() {
       } else {
         res.status(500).json({ success: false, message: `Test email failed via ${testResult.via}: ${testResult.error}` });
       }
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── PHOTO UPLOAD API ───────────────────────────────────────────────────────
+
+  app.post("/api/admin/upload-photo", requireAdminAuth, async (req, res) => {
+    try {
+      const { imageBase64, fileName } = req.body;
+      if (!imageBase64) {
+        return res.status(400).json({ success: false, message: "Image base64 data required." });
+      }
+
+      // Ensure directory exists
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "gallery");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      // Clean base64 string
+      const base64Clean = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Clean, "base64");
+
+      const cleanFileName = `${Date.now()}-${(fileName || "photo.jpg").replace(/[^a-zA-Z0-9\.\-]/g, "_")}`;
+      const filePath = path.join(uploadDir, cleanFileName);
+
+      await fs.promises.writeFile(filePath, buffer);
+
+      const publicUrl = `/uploads/gallery/${cleanFileName}`;
+      await recordAuditLog("photo_uploaded", req.adminUser!.username, req.adminUser!.role, cleanFileName);
+
+      res.json({ success: true, url: publicUrl });
+    } catch (err: any) {
+      console.error("[Photo Upload Error]:", err.message);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── GEMINI AI GENERATE & VISION API ───────────────────────────────────────
+
+  app.post("/api/admin/ai/generate", requireAdminAuth, async (req, res) => {
+    try {
+      const { type, prompt, imageUrl, imageBase64 } = req.body;
+
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey || geminiKey === "your_gemini_api_key_here") {
+        return res.status(503).json({
+          success: false,
+          message: "GEMINI_API_KEY not configured in .env file. Please add your key from https://aistudio.google.com/apikey"
+        });
+      }
+
+      const parts: any[] = [];
+
+      // MULTIMODAL VISION: Process Image if provided for gallery/photo analysis
+      if (imageUrl || imageBase64) {
+        try {
+          let b64Data = "";
+          let mime = "image/jpeg";
+
+          if (imageBase64) {
+            const match = imageBase64.match(/^data:(image\/\w+);base64,/);
+            if (match) mime = match[1];
+            b64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+          } else if (imageUrl.startsWith("/uploads/")) {
+            const localPath = path.join(process.cwd(), "public", imageUrl);
+            if (fs.existsSync(localPath)) {
+              const fileBuf = await fs.promises.readFile(localPath);
+              b64Data = fileBuf.toString("base64");
+              const ext = path.extname(localPath).toLowerCase();
+              if (ext === ".png") mime = "image/png";
+              else if (ext === ".webp") mime = "image/webp";
+            }
+          } else if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+            const imgRes = await fetch(imageUrl);
+            if (imgRes.ok) {
+              const contentType = imgRes.headers.get("content-type");
+              if (contentType) mime = contentType;
+              const arrayBuf = await imgRes.arrayBuffer();
+              b64Data = Buffer.from(arrayBuf).toString("base64");
+            }
+          }
+
+          if (b64Data) {
+            parts.push({
+              inline_data: {
+                mime_type: mime,
+                data: b64Data
+              }
+            });
+          }
+        } catch (imgErr: any) {
+          console.warn("[AI Vision Image Read Warning]:", imgErr.message);
+        }
+      }
+
+      // Add text prompt
+      let systemInstruction = "";
+      if (type === "announcement") {
+        systemInstruction = `You are a school notice board writer for Ashish Memorial Public School, Hindaun City, Rajasthan.
+Write a formal, ultra-concise school notice strictly in standard English (max 40 words).
+Format it with 2-3 short bullet lines using '•' characters (e.g., • Date: ..., • Event: ..., • Note: ...).
+Keep it sleek, professional, and brief for a school notice board.
+Do NOT use Hinglish or Hindi under any circumstances. Only return the formatted announcement text in English.`;
+      } else if (type === "event") {
+        systemInstruction = `You are an event coordinator for Ashish Memorial Public School, Hindaun City, Rajasthan.
+Write a short, engaging event description strictly in formal English (max 60 words).
+Include what the event is about, who should attend, and make it professional and exciting.
+Do NOT use Hinglish or Hindi under any circumstances. Only return the description text in English.`;
+      } else if (type === "gallery") {
+        systemInstruction = `You are an expert school photo analyst for Ashish Memorial Public School.
+Carefully observe what is happening in the photo (students, stage, awards, sports, classroom, atmosphere).
+Write strictly in standard English. Do NOT use Hinglish or Hindi under any circumstances.
+Return ONLY a valid JSON object with two fields in English:
+{
+  "title": "A short 2-4 word catchy title in English (e.g. Annual Sports Day Celebration)",
+  "caption": "A short 1-2 sentence warm, descriptive caption in English (max 30 words)."
+}`;
+      } else {
+        systemInstruction = `You are a helpful school assistant for Ashish Memorial Public School, Hindaun City, Rajasthan. Write a short, professional response strictly in standard English. Keep it concise.`;
+      }
+
+      parts.push({ text: prompt || "Analyze this school photo and describe what you see." });
+
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ parts }]
+          })
+        }
+      );
+
+      if (!geminiRes.ok) {
+        const errJson: any = await geminiRes.json().catch(() => ({}));
+        const errMsg = errJson?.error?.message || `Status ${geminiRes.status}`;
+        console.error("[Gemini AI Error]:", errMsg);
+        return res.status(502).json({ success: false, message: `Gemini AI: ${errMsg}` });
+      }
+
+      const geminiData = await geminiRes.json();
+      const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+      if (!generatedText) {
+        return res.status(502).json({ success: false, message: "Gemini returned empty response. Try again." });
+      }
+
+      await recordAuditLog("ai_generate", req.adminUser!.username, req.adminUser!.role, type, (prompt || "").substring(0, 100));
+
+      let titleResult = "";
+      let captionResult = generatedText.trim();
+
+      if (type === "gallery") {
+        try {
+          const cleanJson = generatedText.replace(/```json/gi, "").replace(/```/g, "").trim();
+          const parsed = JSON.parse(cleanJson);
+          if (parsed.title) titleResult = parsed.title;
+          if (parsed.caption) captionResult = parsed.caption;
+        } catch (e) {
+          // fallback
+        }
+      }
+
+      res.json({
+        success: true,
+        text: captionResult,
+        title: titleResult,
+        caption: captionResult
+      });
+    } catch (err: any) {
+      console.error("[AI Generate Error]:", err.message);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── PUBLIC APIs (No Auth Required) ────────────────────────────────────────
+
+  app.get("/api/announcements", async (_req, res) => {
+    try {
+      const now = new Date().toISOString();
+      const result = await db.execute({
+        sql: `SELECT * FROM announcements WHERE is_published = 1
+              AND (expires_at IS NULL OR expires_at > ?)
+              ORDER BY
+                CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+                created_at DESC`,
+        args: [now]
+      });
+      res.json({ success: true, announcements: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/gallery", async (_req, res) => {
+    try {
+      const result = await db.execute(
+        "SELECT * FROM gallery_items WHERE is_published = 1 ORDER BY created_at DESC"
+      );
+      res.json({ success: true, items: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/events", async (_req, res) => {
+    try {
+      const result = await db.execute(
+        "SELECT * FROM events WHERE is_published = 1 ORDER BY event_date ASC"
+      );
+      res.json({ success: true, events: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── ADMIN: ANNOUNCEMENTS APIs ───────────────────────────────────────────────
+
+  app.get("/api/admin/announcements", requireAdminAuth, async (_req, res) => {
+    try {
+      const result = await db.execute(
+        "SELECT * FROM announcements ORDER BY created_at DESC"
+      );
+      res.json({ success: true, announcements: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/announcements/create", requireAdminAuth, async (req, res) => {
+    try {
+      const { title, content, priority, expires_at } = req.body;
+      if (!title || !content) {
+        return res.status(400).json({ success: false, message: "Title and content are required." });
+      }
+      const username = req.adminUser!.username;
+      await db.execute({
+        sql: `INSERT INTO announcements (title, content, priority, is_published, created_by, created_at, expires_at)
+              VALUES (?, ?, ?, 1, ?, datetime('now'), ?)`,
+        args: [title, content, priority || "normal", username, expires_at || null]
+      });
+      await recordAuditLog("announcement_created", username, req.adminUser!.role, title);
+      res.json({ success: true, message: "Announcement published successfully!" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/admin/announcements/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.execute({ sql: "DELETE FROM announcements WHERE id = ?", args: [id] });
+      await recordAuditLog("announcement_deleted", req.adminUser!.username, req.adminUser!.role, id);
+      res.json({ success: true, message: "Announcement deleted." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/admin/announcements/:id/toggle", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await db.execute({ sql: "SELECT is_published FROM announcements WHERE id = ?", args: [id] });
+      const current = (existing.rows[0] as any)?.is_published;
+      await db.execute({ sql: "UPDATE announcements SET is_published = ? WHERE id = ?", args: [current === 1 ? 0 : 1, id] });
+      res.json({ success: true, message: "Visibility toggled." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── ADMIN: GALLERY MANAGER APIs ─────────────────────────────────────────────
+
+  app.get("/api/admin/gallery", requireAdminAuth, async (_req, res) => {
+    try {
+      const result = await db.execute(
+        "SELECT * FROM gallery_items ORDER BY created_at DESC"
+      );
+      res.json({ success: true, items: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/gallery/create", requireAdminAuth, async (req, res) => {
+    try {
+      const { title, subtitle, category, image_url } = req.body;
+      if (!title || !image_url) {
+        return res.status(400).json({ success: false, message: "Title and image URL are required." });
+      }
+      const username = req.adminUser!.username;
+      await db.execute({
+        sql: `INSERT INTO gallery_items (title, subtitle, category, image_url, is_published, created_by, created_at)
+              VALUES (?, ?, ?, ?, 1, ?, datetime('now'))`,
+        args: [title, subtitle || "", category || "general", image_url, username]
+      });
+      await recordAuditLog("gallery_item_added", username, req.adminUser!.role, title);
+      res.json({ success: true, message: "Gallery item added successfully!" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/admin/gallery/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.execute({ sql: "DELETE FROM gallery_items WHERE id = ?", args: [id] });
+      await recordAuditLog("gallery_item_deleted", req.adminUser!.username, req.adminUser!.role, id);
+      res.json({ success: true, message: "Gallery item deleted." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ─── ADMIN: EVENTS APIs ───────────────────────────────────────────────────────
+
+  app.get("/api/admin/events", requireAdminAuth, async (_req, res) => {
+    try {
+      const result = await db.execute(
+        "SELECT * FROM events ORDER BY event_date ASC"
+      );
+      res.json({ success: true, events: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/admin/events/create", requireAdminAuth, async (req, res) => {
+    try {
+      const { title, description, event_date, event_type } = req.body;
+      if (!title || !event_date) {
+        return res.status(400).json({ success: false, message: "Title and event date are required." });
+      }
+      const username = req.adminUser!.username;
+      await db.execute({
+        sql: `INSERT INTO events (title, description, event_date, event_type, is_published, created_by, created_at)
+              VALUES (?, ?, ?, ?, 1, ?, datetime('now'))`,
+        args: [title, description || "", event_date, event_type || "general", username]
+      });
+      await recordAuditLog("event_created", username, req.adminUser!.role, title);
+      res.json({ success: true, message: "Event created successfully!" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/admin/events/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, description, event_date, event_type } = req.body;
+      if (!title || !event_date) {
+        return res.status(400).json({ success: false, message: "Title and event date are required." });
+      }
+      await db.execute({
+        sql: "UPDATE events SET title = ?, description = ?, event_date = ?, event_type = ? WHERE id = ?",
+        args: [title, description || "", event_date, event_type || "general", id]
+      });
+      await recordAuditLog("event_updated", req.adminUser!.username, req.adminUser!.role, id);
+      res.json({ success: true, message: "Event updated successfully!" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/admin/events/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.execute({ sql: "DELETE FROM events WHERE id = ?", args: [id] });
+      await recordAuditLog("event_deleted", req.adminUser!.username, req.adminUser!.role, id);
+      res.json({ success: true, message: "Event deleted." });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }
