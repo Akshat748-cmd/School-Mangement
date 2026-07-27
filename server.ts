@@ -53,7 +53,7 @@ const liveDb = rawTursoUrl
 const DEFAULT_SETTINGS = {
   adminPassword: "ampsadmin",
   whatsappPhone: "919999999999",
-  emailProvider: "formsubmit",
+  emailProvider: "brevo",
   web3formsKey: "",
   smtpHost: "",
   smtpPort: "465",
@@ -644,27 +644,76 @@ function recordFailedLogin(ip: string) {
 // Email Delivery Engine
 async function sendInquiryEmail(inquiryData: { name: string; phone: string; email: string; message: string; context?: string }) {
   const config = await getResolvedConfig();
-  const provider = config.emailProvider;
+  const provider = process.env.EMAIL_PROVIDER || config.emailProvider;
   const recipient = config.inquiryRecipient || "admin@example.com";
-  const contextLabel = inquiryData.context === "counselling" ? "Stream Counselling Request" : "Admission Inquiry";
 
-  console.log(`[Email Dispatch] Sending via '${provider}' to '${recipient}' for context '${contextLabel}'`);
+  const isCounselling = inquiryData.context === "counselling";
+  const emailSubject = isCounselling
+    ? `New Counselling Session Request: ${inquiryData.name} (${inquiryData.phone})`
+    : `New Admission Inquiry: ${inquiryData.name} (${inquiryData.phone})`;
+  const emailHeading = isCounselling ? "New Counselling Session Request" : "New Prospective Student Inquiry";
+  const emailIntroLine = isCounselling
+    ? "A new stream selection counselling request has been submitted on the Ashish Memorial Public School Portal:"
+    : "A new admission inquiry has been submitted on the Ashish Memorial Public School Portal:";
+  const messageLabel = isCounselling ? "Stream Interest" : "Message/Class";
+  const cleanPhone = inquiryData.phone.replace(/\D/g, "");
+  const formattedDate = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+  console.log(`[Email Dispatch] Sending via '${provider}' to '${recipient}' with subject '${emailSubject}'`);
 
   const htmlBody = `
-    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; rounded: 12px;">
-      <h2 style="color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">AMPS Portal - New ${contextLabel}</h2>
-      <p><strong>Context:</strong> <span style="background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-weight: bold;">${contextLabel}</span></p>
-      <p><strong>Name:</strong> ${inquiryData.name}</p>
-      <p><strong>Phone:</strong> ${inquiryData.phone}</p>
-      <p><strong>Email:</strong> ${inquiryData.email || 'N/A'}</p>
-      <p><strong>Message:</strong></p>
-      <blockquote style="background: #f8fafc; padding: 12px; border-left: 4px solid #3b82f6; margin: 0;">
-        ${inquiryData.message || 'No additional details provided.'}
-      </blockquote>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin-top: 20px;" />
-      <p style="font-size: 11px; color: #64748b;">This inquiry was captured automatically by Ashish Memorial Public School Portal.</p>
+<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#f7f5f0;">
+  <div style="background:#14213d;padding:24px 32px;border-bottom:4px solid #C9A227;">
+    <p style="margin:0;color:#C9A227;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:600;background:rgba(201,162,39,0.15);padding:4px 10px;border-radius:4px;border:1px solid rgba(201,162,39,0.3);display:inline-block;">
+      ${isCounselling ? "ACADEMIC COUNSELLING DESK" : "AMPS ADMISSION DESK"}
+    </p>
+    <h1 style="font-family:Georgia,serif;color:#ffffff;font-size:20px;margin:12px 0 4px 0;font-weight:700;">
+      Ashish Memorial Public Senior Secondary School
+    </h1>
+    <p style="color:#cbd5e1;font-size:12px;margin:0;">Hindaun City (Karauli), Rajasthan · Estd. 2005</p>
+  </div>
+  <div style="background:#ffffff;padding:28px 32px;color:#1e293b;line-height:1.6;">
+    <h2 style="color:#14213D;font-family:Georgia,serif;font-size:18px;margin-top:0;margin-bottom:12px;font-weight:700;border-bottom:2px solid #f1f5f9;padding-bottom:8px;">
+      ${emailHeading}
+    </h2>
+    <p style="font-size:13px;color:#475569;margin-top:0;margin-bottom:20px;">${emailIntroLine}</p>
+    <table style="width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      <tr style="background-color:#f8fafc;">
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-weight:700;font-size:12px;color:#64748b;text-transform:uppercase;width:140px;">Name</td>
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-weight:700;font-size:14px;color:#0f172a;">${inquiryData.name}</td>
+      </tr>
+      <tr style="background-color:#ffffff;">
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-weight:700;font-size:12px;color:#64748b;text-transform:uppercase;">Phone</td>
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;">
+          <a href="tel:${inquiryData.phone}" style="color:#7A2331;font-weight:700;text-decoration:none;">${inquiryData.phone}</a>
+        </td>
+      </tr>
+      <tr style="background-color:#f8fafc;">
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-weight:700;font-size:12px;color:#64748b;text-transform:uppercase;">Email</td>
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;">
+          ${inquiryData.email ? `<a href="mailto:${inquiryData.email}" style="color:#14213D;font-weight:600;text-decoration:none;">${inquiryData.email}</a>` : '<span style="color:#94a3b8;font-style:italic;">Not provided</span>'}
+        </td>
+      </tr>
+      <tr style="background-color:#ffffff;">
+        <td style="padding:12px 16px;font-weight:700;font-size:12px;color:#64748b;text-transform:uppercase;vertical-align:top;">${messageLabel}</td>
+        <td style="padding:12px 16px;font-size:13px;color:#334155;white-space:pre-wrap;line-height:1.5;font-weight:500;">${inquiryData.message || (isCounselling ? "Requesting a stream selection counselling session." : "Interested in school admission.")}</td>
+      </tr>
+    </table>
+    <div style="background-color:#fffbeb;border:1px solid #fef3c7;border-left:4px solid #C9A227;padding:14px 18px;border-radius:4px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;font-weight:700;color:#92400e;">Please contact the applicant within 24 hours</p>
     </div>
-  `;
+    <div style="background-color:#f1f5f9;padding:16px;border-radius:6px;text-align:center;border:1px solid #cbd5e1;margin-bottom:10px;">
+      <span style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:12px;">Quick Administrator Action</span>
+      <a href="tel:${inquiryData.phone}" style="display:inline-block;background-color:#14213D;color:#ffffff;padding:10px 16px;border-radius:4px;text-decoration:none;font-size:12px;font-weight:700;margin:4px 5px;vertical-align:middle;">Call Applicant (${inquiryData.phone})</a>
+      <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hello ${inquiryData.name}, regarding your ${isCounselling ? 'counselling request' : 'admission inquiry'} at Ashish Memorial Public School...`)}" style="display:inline-block;background-color:#16a34a;color:#ffffff;padding:10px 16px;border-radius:4px;text-decoration:none;font-size:12px;font-weight:700;margin:4px 5px;vertical-align:middle;">Reply via WhatsApp</a>
+    </div>
+  </div>
+  <div style="background-color:#f8fafc;padding:16px 24px;text-align:center;font-size:11px;color:#64748b;border-top:1px solid #e2e8f0;line-height:1.5;">
+    <div style="font-weight:700;color:#14213D;margin-bottom:4px;">Ashish Memorial Public Senior Secondary School</div>
+    <div>Hindaun City (Karauli), Rajasthan · Phone: 07469 234006 / 94144 00824 · Email: ampspankaj@gmail.com</div>
+    <div style="margin-top:8px;color:#94a3b8;font-size:10px;">Submitted on: ${formattedDate} IST</div>
+  </div>
+</div>`;
 
   if (provider === "web3forms" && config.web3formsKey) {
     try {
@@ -673,13 +722,13 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           access_key: config.web3formsKey,
-          subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+          subject: emailSubject,
           from_name: "AMPS School Portal",
           to: recipient,
           name: inquiryData.name,
           phone: inquiryData.phone,
           email: inquiryData.email,
-          message: `${contextLabel}: ${inquiryData.message}`
+          message: `${emailHeading}: ${inquiryData.message}`
         })
       });
       const data = await response.json();
@@ -705,7 +754,7 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
             email: config.brevoSenderEmail || recipient
           },
           to: [{ email: recipient }],
-          subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+          subject: emailSubject,
           htmlContent: htmlBody
         })
       });
@@ -731,7 +780,7 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
       await transporter.sendMail({
         from: `"AMPS School Portal" <${config.smtpUser || recipient}>`,
         to: recipient,
-        subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+        subject: emailSubject,
         html: htmlBody
       });
       return { success: true, via: "Nodemailer SMTP" };
@@ -746,12 +795,12 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify({
-        _subject: `[AMPS Portal] New ${contextLabel} from ${inquiryData.name}`,
+        _subject: emailSubject,
         _template: "table",
         Name: inquiryData.name,
         Phone: inquiryData.phone,
         Email: inquiryData.email,
-        Context: contextLabel,
+        Context: emailHeading,
         Message: inquiryData.message
       })
     });
@@ -761,6 +810,62 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
   } catch (err: any) {
     return { success: false, via: "FormSubmit Tunnel", error: err.message };
   }
+}
+
+// Dedicated OTP Email Sender via Brevo API
+async function sendOtpEmail(email: string, otp: string) {
+  const config = await getResolvedConfig();
+  const recipient = config.inquiryRecipient || "admin@example.com";
+  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
+
+  if (!apiKey) {
+    throw new Error("Brevo API key is not configured for sending OTP emails.");
+  }
+
+  const otpHtmlBody = `
+<div style="max-width:480px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+  <div style="background:#14213d;padding:20px 28px;border-bottom:3px solid #C9A227;">
+    <p style="margin:0;color:#C9A227;font-size:10px;letter-spacing:2px;text-transform:uppercase;font-weight:600;">Ashish Memorial Public School</p>
+    <p style="margin:6px 0 0;color:#ffffff;font-size:14px;font-family:Georgia,serif;">Email Verification</p>
+  </div>
+  <div style="padding:28px;text-align:center;">
+    <p style="color:#475569;font-size:13px;margin:0 0 20px;">Use this code to verify your email address. Valid for 10 minutes.</p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin-bottom:20px;display:inline-block;min-width:200px;">
+      <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#14213d;font-family:monospace;">${otp}</p>
+    </div>
+    <p style="color:#94a3b8;font-size:11px;margin:0;">Do not share this code with anyone.</p>
+  </div>
+  <div style="background:#f8fafc;padding:12px 28px;text-align:center;border-top:1px solid #e2e8f0;">
+    <p style="margin:0;color:#94a3b8;font-size:10px;">Ashish Memorial Public Sr. Sec. School · Hindaun City, Rajasthan</p>
+  </div>
+</div>`;
+
+  console.log(`[OTP Dispatch] Sending verification code to '${email}' via Brevo API`);
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({
+      sender: {
+        name: config.brevoSenderName || "AMPS Portal",
+        email: config.brevoSenderEmail || recipient
+      },
+      to: [{ email }],
+      subject: "Your AMPS Portal Verification Code",
+      htmlContent: otpHtmlBody
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Brevo API OTP status ${response.status}: ${errText}`);
+  }
+
+  return { success: true };
 }
 
 // Server Entry Point
@@ -788,7 +893,7 @@ async function startServer() {
   // ─── PUBLIC EMAIL OTP APIs ───────────────────────────────────────────────
   app.post("/api/send-otp", async (req, res) => {
     try {
-      const { email, name, formContext } = req.body;
+      const { email } = req.body;
       if (!email || !email.includes("@")) {
         return res.status(400).json({ success: false, message: "Valid email address is required." });
       }
@@ -801,14 +906,7 @@ async function startServer() {
 
       console.log(`[OTP GENERATED] Email: ${cleanEmail} | Code: ${generatedOtp}`);
 
-      const contextLabel = formContext === "counselling" ? "Counselling Advisory Desk" : "Admission Inquiry";
-      await sendInquiryEmail({
-        name: name || "Applicant",
-        phone: "-",
-        email: cleanEmail,
-        message: `Your Email Verification OTP Code is: ${generatedOtp}\n\nThis OTP is valid for 10 minutes.`,
-        context: `${contextLabel} - Email Verification`
-      }).catch(err => console.error("[OTP Email Dispatch Error]:", err.message));
+      await sendOtpEmail(cleanEmail, generatedOtp);
 
       return res.json({
         success: true,

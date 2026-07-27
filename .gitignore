@@ -25,3 +25,4 @@ school.db
 # Admin Password History Mirror File
 admin-credentials.local.txt
 active-admin-credentials.local.txt
+active-admin-credentials.live.txt
