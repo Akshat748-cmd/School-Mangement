@@ -52,7 +52,7 @@ const liveDb = rawTursoUrl
 // Default Configuration Settings
 const DEFAULT_SETTINGS = {
   adminPassword: "ampsadmin",
-  whatsappPhone: "919999999999",
+  whatsappPhone: "917852042541",
   emailProvider: "brevo",
   web3formsKey: "",
   smtpHost: "",
@@ -710,7 +710,7 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
   </div>
   <div style="background-color:#f8fafc;padding:16px 24px;text-align:center;font-size:11px;color:#64748b;border-top:1px solid #e2e8f0;line-height:1.5;">
     <div style="font-weight:700;color:#14213D;margin-bottom:4px;">Ashish Memorial Public Senior Secondary School</div>
-    <div>Hindaun City (Karauli), Rajasthan · Phone: 07469 234006 / 94144 00824 · Email: ampspankaj@gmail.com</div>
+    <div>Hindaun City (Karauli), Rajasthan · Phone: 91163 04006 / 78520 42541 · Email: ampspankaj@gmail.com</div>
     <div style="margin-top:8px;color:#94a3b8;font-size:10px;">Submitted on: ${formattedDate} IST</div>
   </div>
 </div>`;
@@ -812,6 +812,74 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
   }
 }
 
+// Dedicated User Confirmation Email Sender via Brevo API
+async function sendConfirmationEmail(email: string, name: string, isCounselling: boolean) {
+  const config = await getResolvedConfig();
+  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
+  const recipient = config.inquiryRecipient || "admin@example.com";
+
+  if (!apiKey) {
+    throw new Error("Brevo API key is not configured for sending confirmation emails.");
+  }
+
+  const subject = isCounselling ? "Your Counselling Session Request — AMPS School" : "Your Admission Inquiry — AMPS School";
+
+  const introLine = isCounselling
+    ? "Thank you for your interest in our stream selection counselling. We've received your request, and our academic counselling team will get in touch with you shortly to schedule a session."
+    : "Thank you for your interest in Ashish Memorial Public Sr. Sec. School. We've received your admission inquiry, and our admissions team will contact you within 24 hours with further details.";
+
+  const htmlBody = `
+<div style="max-width:520px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;border:1px solid #e5e7eb;">
+  <div style="padding:24px 32px 0;">
+    <p style="margin:0 0 24px;font-size:11px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;font-family:Georgia,serif;">Ashish Memorial Public School</p>
+  </div>
+  <div style="padding:0 32px 24px;">
+    <p style="color:#0f172a;font-size:15px;margin:0 0 16px;">Dear ${name},</p>
+    <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 20px;">${introLine}</p>
+    <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 24px;">
+      In the meantime, feel free to explore our website at <a href="https://ampsschool.in" style="color:#8B1E3F;font-weight:600;">ampsschool.in</a>.
+    </p>
+    <p style="color:#475569;font-size:14px;line-height:1.7;margin:0;">
+      You can also reach us directly at <a href="tel:9116304006" style="color:#14213d;font-weight:600;">91163 04006</a> or on <a href="https://wa.me/917852042541" style="color:#16a34a;font-weight:600;">WhatsApp</a>.
+    </p>
+  </div>
+  <div style="height:1px;background:#f1f5f9;margin:0 32px;"></div>
+  <div style="padding:20px 32px 28px;">
+    <p style="color:#94a3b8;font-size:12px;margin:0;">Warm regards,</p>
+    <p style="color:#14213d;font-size:13px;font-weight:600;margin:2px 0 0;font-family:Georgia,serif;">Ashish Memorial Public Sr. Sec. School</p>
+    <p style="color:#94a3b8;font-size:11px;margin:4px 0 0;">Hindaun City (Karauli), Rajasthan</p>
+  </div>
+</div>`;
+
+  console.log(`[Confirmation Dispatch] Sending confirmation email to '${email}' via Brevo API`);
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({
+      sender: {
+        name: config.brevoSenderName || "AMPS Portal",
+        email: config.brevoSenderEmail || recipient
+      },
+      to: [{ email, name }],
+      replyTo: { email: "ampspankaj@gmail.com" },
+      subject: subject,
+      htmlContent: htmlBody
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Brevo API confirmation email status ${response.status}: ${errText}`);
+  }
+
+  return { success: true };
+}
+
 // Dedicated OTP Email Sender via Brevo API
 async function sendOtpEmail(email: string, otp: string) {
   const config = await getResolvedConfig();
@@ -823,20 +891,27 @@ async function sendOtpEmail(email: string, otp: string) {
   }
 
   const otpHtmlBody = `
-<div style="max-width:480px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-  <div style="background:#14213d;padding:20px 28px;border-bottom:3px solid #C9A227;">
-    <p style="margin:0;color:#C9A227;font-size:10px;letter-spacing:2px;text-transform:uppercase;font-weight:600;">Ashish Memorial Public School</p>
-    <p style="margin:6px 0 0;color:#ffffff;font-size:14px;font-family:Georgia,serif;">Email Verification</p>
+<div style="max-width:520px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;border:1px solid #e5e7eb;">
+  <div style="padding:24px 32px 0;">
+    <p style="margin:0 0 24px;font-size:11px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;font-family:Georgia,serif;">Ashish Memorial Public School</p>
   </div>
-  <div style="padding:28px;text-align:center;">
-    <p style="color:#475569;font-size:13px;margin:0 0 20px;">Use this code to verify your email address. Valid for 10 minutes.</p>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin-bottom:20px;display:inline-block;min-width:200px;">
+  <div style="padding:0 32px 24px;">
+    <p style="color:#0f172a;font-size:15px;margin:0 0 16px;">Email Verification Code</p>
+    <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 20px;">
+      Use the verification code below to complete your email verification. This code is valid for 10 minutes.
+    </p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 24px;margin-bottom:20px;text-align:center;display:inline-block;min-width:200px;">
       <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#14213d;font-family:monospace;">${otp}</p>
     </div>
-    <p style="color:#94a3b8;font-size:11px;margin:0;">Do not share this code with anyone.</p>
+    <p style="color:#94a3b8;font-size:12px;margin:0;font-style:italic;">
+      Do not share this code with anyone.
+    </p>
   </div>
-  <div style="background:#f8fafc;padding:12px 28px;text-align:center;border-top:1px solid #e2e8f0;">
-    <p style="margin:0;color:#94a3b8;font-size:10px;">Ashish Memorial Public Sr. Sec. School · Hindaun City, Rajasthan</p>
+  <div style="height:1px;background:#f1f5f9;margin:0 32px;"></div>
+  <div style="padding:20px 32px 28px;">
+    <p style="color:#94a3b8;font-size:12px;margin:0;">Warm regards,</p>
+    <p style="color:#14213d;font-size:13px;font-weight:600;margin:2px 0 0;font-family:Georgia,serif;">Ashish Memorial Public Sr. Sec. School</p>
+    <p style="color:#94a3b8;font-size:11px;margin:4px 0 0;">Hindaun City (Karauli), Rajasthan</p>
   </div>
 </div>`;
 
@@ -855,6 +930,7 @@ async function sendOtpEmail(email: string, otp: string) {
         email: config.brevoSenderEmail || recipient
       },
       to: [{ email }],
+      replyTo: { email: "ampspankaj@gmail.com" },
       subject: "Your AMPS Portal Verification Code",
       htmlContent: otpHtmlBody
     })
@@ -967,6 +1043,14 @@ async function startServer() {
 
       const dispatchRes = await sendInquiryEmail({ name, phone, email: email || "", message: message || "", context: inqContext });
 
+      if (dispatchRes.success && email && String(email).trim() !== "") {
+        try {
+          await sendConfirmationEmail(String(email).trim(), name, inqContext === "counselling");
+        } catch (err: any) {
+          console.error("[Confirmation Email Error]:", err.message);
+        }
+      }
+
       await db.execute({
         sql: `INSERT INTO inquiries (
                 id, name, phone, email, message, formContext, timestamp, isRead, status, dispatchStatus, dispatchedVia, dispatchError, deleted
@@ -985,7 +1069,7 @@ async function startServer() {
         ]
       });
 
-      const whatsappRedirectUrl = `https://wa.me/${bootConfig.whatsappPhone || '919999999999'}?text=${encodeURIComponent(
+      const whatsappRedirectUrl = `https://wa.me/${bootConfig.whatsappPhone || '917852042541'}?text=${encodeURIComponent(
         `Hello AMPS Admin, I have submitted an inquiry.\nName: ${name}\nPhone: ${phone}\nEmail: ${email || 'N/A'}\nMessage: ${message || 'N/A'}`
       )}`;
 
