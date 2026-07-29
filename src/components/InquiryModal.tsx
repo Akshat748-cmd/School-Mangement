@@ -232,13 +232,48 @@ export default function InquiryModal({
 
     if (!inquiryName || pErr || eErr) return;
 
-    if (!otpVerified) {
+    let isVerified = otpVerified;
+
+    if (!isVerified) {
       if (!otpSent) {
         handleSendOtp();
         return;
       }
-      setOtpError("Please enter the 6-digit OTP code sent to your email and click Verify.");
-      return;
+
+      if (!otpCode || otpCode.trim().length !== 6) {
+        setOtpError("Please enter the 6-digit OTP code sent to your email.");
+        return;
+      }
+
+      // Auto-verify OTP if user clicks main Submit button directly
+      setOtpVerifying(true);
+      setOtpError(null);
+      try {
+        const verifyRes = await fetch("/api/verify-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: inquiryEmail.trim(),
+            otp: otpCode.trim()
+          })
+        });
+        const verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.verified) {
+          setOtpVerified(true);
+          setOtpSuccess("Email address verified successfully!");
+          isVerified = true;
+        } else {
+          setOtpError(verifyData.message || "Incorrect OTP code. Please try again.");
+          setOtpVerifying(false);
+          return;
+        }
+      } catch (err: any) {
+        setOtpError(err.message || "Invalid OTP code. Please try again.");
+        setOtpVerifying(false);
+        return;
+      } finally {
+        setOtpVerifying(false);
+      }
     }
 
     setInquirySubmitting(true);

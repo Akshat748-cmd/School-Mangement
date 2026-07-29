@@ -812,15 +812,11 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
   }
 }
 
-// Dedicated User Confirmation Email Sender via Brevo API
+// Dedicated User Confirmation Email Sender
 async function sendConfirmationEmail(email: string, name: string, isCounselling: boolean) {
   const config = await getResolvedConfig();
-  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
+  const provider = process.env.EMAIL_PROVIDER || config.emailProvider;
   const recipient = config.inquiryRecipient || "admin@example.com";
-
-  if (!apiKey) {
-    throw new Error("Brevo API key is not configured for sending confirmation emails.");
-  }
 
   const subject = isCounselling ? "Your Counselling Session Request — AMPS School" : "Your Admission Inquiry — AMPS School";
 
@@ -851,7 +847,33 @@ async function sendConfirmationEmail(email: string, name: string, isCounselling:
   </div>
 </div>`;
 
-  console.log(`[Confirmation Dispatch] Sending confirmation email to '${email}' via Brevo API`);
+  console.log(`[Confirmation Dispatch] Sending confirmation email to '${email}' via provider '${provider}'`);
+
+  if ((provider === "smtp" || !config.brevoApiKey) && config.smtpHost && config.smtpUser && config.smtpPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: config.smtpHost,
+        port: parseInt(config.smtpPort || "465", 10),
+        secure: config.smtpPort === "465",
+        auth: { user: config.smtpUser, pass: config.smtpPass }
+      });
+      await transporter.sendMail({
+        from: `"${config.brevoSenderName || 'AMPS Portal'}" <${config.smtpUser}>`,
+        to: email,
+        replyTo: config.inquiryRecipient || recipient,
+        subject: subject,
+        html: htmlBody
+      });
+      return { success: true, via: "Nodemailer SMTP" };
+    } catch (err: any) {
+      console.error("[SMTP Confirmation Email Error]:", err.message);
+    }
+  }
+
+  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
+  if (!apiKey) {
+    throw new Error("No active email provider (SMTP or Brevo) is configured.");
+  }
 
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -866,7 +888,7 @@ async function sendConfirmationEmail(email: string, name: string, isCounselling:
         email: config.brevoSenderEmail || recipient
       },
       to: [{ email, name }],
-      replyTo: { email: "ampspankaj@gmail.com" },
+      replyTo: { email: config.inquiryRecipient || recipient },
       subject: subject,
       htmlContent: htmlBody
     })
@@ -874,21 +896,17 @@ async function sendConfirmationEmail(email: string, name: string, isCounselling:
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Brevo API confirmation email status ${response.status}: ${errText}`);
+    throw new Error(`Brevo API status ${response.status}: ${errText}`);
   }
 
   return { success: true };
 }
 
-// Dedicated OTP Email Sender via Brevo API
+// Dedicated OTP Email Sender
 async function sendOtpEmail(email: string, otp: string) {
   const config = await getResolvedConfig();
+  const provider = process.env.EMAIL_PROVIDER || config.emailProvider;
   const recipient = config.inquiryRecipient || "admin@example.com";
-  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
-
-  if (!apiKey) {
-    throw new Error("Brevo API key is not configured for sending OTP emails.");
-  }
 
   const otpHtmlBody = `
 <div style="max-width:520px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;border:1px solid #e5e7eb;">
@@ -915,7 +933,33 @@ async function sendOtpEmail(email: string, otp: string) {
   </div>
 </div>`;
 
-  console.log(`[OTP Dispatch] Sending verification code to '${email}' via Brevo API`);
+  console.log(`[OTP Dispatch] Sending verification code to '${email}' via provider '${provider}'`);
+
+  if ((provider === "smtp" || !config.brevoApiKey) && config.smtpHost && config.smtpUser && config.smtpPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: config.smtpHost,
+        port: parseInt(config.smtpPort || "465", 10),
+        secure: config.smtpPort === "465",
+        auth: { user: config.smtpUser, pass: config.smtpPass }
+      });
+      await transporter.sendMail({
+        from: `"${config.brevoSenderName || 'AMPS Portal'}" <${config.smtpUser}>`,
+        to: email,
+        replyTo: config.inquiryRecipient || recipient,
+        subject: "Your AMPS Portal Verification Code",
+        html: otpHtmlBody
+      });
+      return { success: true, via: "Nodemailer SMTP" };
+    } catch (err: any) {
+      console.error("[SMTP OTP Error]:", err.message);
+    }
+  }
+
+  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
+  if (!apiKey) {
+    throw new Error("No active email provider (SMTP or Brevo) is configured for OTP emails.");
+  }
 
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -930,7 +974,7 @@ async function sendOtpEmail(email: string, otp: string) {
         email: config.brevoSenderEmail || recipient
       },
       to: [{ email }],
-      replyTo: { email: "ampspankaj@gmail.com" },
+      replyTo: { email: config.inquiryRecipient || recipient },
       subject: "Your AMPS Portal Verification Code",
       htmlContent: otpHtmlBody
     })
