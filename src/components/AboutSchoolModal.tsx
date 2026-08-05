@@ -52,7 +52,7 @@ export default function AboutSchoolModal({ isOpen, onClose, onOpenInquiryModal }
       title: "School Overview",
       icon: <School className="w-5 h-5" />,
       content: (
-        <p className="text-muted-text text-xs sm:text-sm leading-relaxed font-sans">
+        <p className="text-muted-text text-xs sm:text-sm leading-[1.72] font-sans">
           Ashish Memorial Public Sr. Sec. School, established in 2005, is a premier educational institution in Hindaun City, Rajasthan. Guided by scholarly principles, deep discipline, and modern pedagogical rigor, we guide students towards stellar state board records and seamless foundation preparation for IIT-JEE and NEET.
         </p>
       )
@@ -62,7 +62,7 @@ export default function AboutSchoolModal({ isOpen, onClose, onOpenInquiryModal }
       title: "Our Mission",
       icon: <Target className="w-5 h-5" />,
       content: (
-        <p className="text-muted-text text-xs sm:text-sm leading-relaxed font-sans">
+        <p className="text-muted-text text-xs sm:text-sm leading-[1.72] font-sans">
           To foster holistic development of students through academic excellence, character building, and practical skill development, preparing them for competitive exams and life-long success.
         </p>
       )
@@ -72,7 +72,7 @@ export default function AboutSchoolModal({ isOpen, onClose, onOpenInquiryModal }
       title: "Why Choose AMPS",
       icon: <Award className="w-5 h-5" />,
       content: (
-        <ul className="space-y-2 sm:space-y-3 font-sans text-xs sm:text-sm text-muted-text">
+        <ul className="space-y-2.5 font-sans text-xs sm:text-sm text-muted-text leading-[1.7]">
           {[
             "Experienced and dedicated faculty committed to individual student growth",
             "State-of-the-art facilities including laboratories, library, and sports grounds",
@@ -81,7 +81,7 @@ export default function AboutSchoolModal({ isOpen, onClose, onOpenInquiryModal }
             "Transport facility with GPS-tracked buses",
             "Bilingual medium (English & Hindi) for inclusive learning"
           ].map((item, idx) => (
-            <li key={idx} className="flex items-start gap-2 sm:gap-3">
+            <li key={idx} className="flex items-start gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-brass-gold shrink-0 mt-0.5" />
               <span>{item}</span>
             </li>
@@ -103,10 +103,10 @@ export default function AboutSchoolModal({ isOpen, onClose, onOpenInquiryModal }
             { name: "Medical Room", desc: "First-aid and immediate healthcare support" }
           ].map((facility, idx) => (
             <div key={idx} className="bg-muted-board/30 border border-border-custom/55 p-3 rounded-sm">
-              <span className="font-serif text-sm font-bold text-ink-navy block mb-0.5">
+              <span className="font-serif text-sm font-bold text-ink-navy block mb-0.5 tracking-tight">
                 {facility.name}
               </span>
-              <span className="text-[11px] text-muted-text">{facility.desc}</span>
+              <span className="text-[11px] text-muted-text leading-relaxed">{facility.desc}</span>
             </div>
           ))}
         </div>
@@ -118,17 +118,17 @@ export default function AboutSchoolModal({ isOpen, onClose, onOpenInquiryModal }
       icon: <PhoneCall className="w-5 h-5" />,
       content: (
         <div className="space-y-3 font-sans text-xs sm:text-sm text-muted-text">
-          <p className="leading-relaxed">
+          <p className="leading-[1.7]">
             Schedule a campus visit to experience AMPS firsthand.
           </p>
           <div className="space-y-2 pt-1">
             <div className="flex items-center gap-3">
               <PhoneCall className="w-4 h-4 text-maroon shrink-0" />
-              <span>91163 04006 / 94131 82619</span>
+              <span className="font-mono text-xs font-semibold tracking-wide">91163 04006 / 94131 82619</span>
             </div>
             <div className="flex items-center gap-3">
               <Mail className="w-4 h-4 text-maroon shrink-0" />
-              <span>ampspankaj@gmail.com</span>
+              <span className="font-mono text-xs font-semibold tracking-wide">ampspankaj@gmail.com</span>
             </div>
             <div className="flex items-center gap-3">
               <MapPin className="w-4 h-4 text-maroon shrink-0" />

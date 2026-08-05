@@ -123,6 +123,26 @@ export default function InquiryModal({
     return () => clearInterval(interval);
   }, [resendTimer]);
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const handleSendOtp = async () => {
     setPhoneTouched(true);
     setEmailTouched(true);
@@ -349,20 +369,21 @@ export default function InquiryModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="relative w-full max-w-lg bg-white border border-border-custom shadow-2xl rounded-sm overflow-hidden text-slate-800 my-auto max-h-[90vh] flex flex-col font-sans"
+            className="relative w-full max-w-lg bg-white border-2 border-brass-gold/35 shadow-2xl rounded-2xl overflow-hidden text-slate-800 my-auto max-h-[90vh] flex flex-col font-sans"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-ink-navy text-white px-6 py-4 sm:py-5 flex justify-between items-center border-b border-brass-gold/30 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-sm bg-brass-gold/20 border border-brass-gold/40 flex items-center justify-center text-brass-gold shrink-0">
+            <div className="bg-ink-navy text-white px-6 sm:px-8 py-5 flex justify-between items-center border-b border-brass-gold/30 shrink-0 shadow-sm relative">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brass-gold via-maroon to-brass-gold pointer-events-none" />
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-xl bg-brass-gold/20 border border-brass-gold/40 flex items-center justify-center text-brass-gold shrink-0">
                   <GraduationCap className="w-6 h-6" />
                 </div>
                 <div className="text-left">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-brass-gold font-bold block">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-brass-gold font-bold block mb-0.5">
                     {formContext === "counselling" ? "Academic Guidance Desk" : "Instant Advisory Desk"}
                   </span>
-                  <h3 className="font-serif text-lg font-bold tracking-tight text-white">
+                  <h3 className="font-serif text-lg sm:text-xl font-bold tracking-tight text-white">
                     {formContext === "counselling" ? "Book Your Counselling Session" : "Admission Inquiry Form"}
                   </h3>
                 </div>
@@ -377,17 +398,17 @@ export default function InquiryModal({
             </div>
 
             {/* Modal Content */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 text-left">
+            <div className="p-6 sm:p-7 overflow-y-auto flex-1 text-left space-y-4">
               {inquirySubmitted ? (
                 dispatchStatus === "Failed" ? (
-                  <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-sm text-center my-4">
-                    <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-3">
-                      <span className="text-rose-600 text-xl font-bold">⚠️</span>
+                  <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-xl text-center my-2 space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-2 text-rose-600 text-xl font-bold">
+                      ⚠️
                     </div>
-                    <h4 className="font-serif font-bold text-lg text-rose-900 mb-2">
+                    <h4 className="font-serif font-bold text-lg text-rose-900">
                       Failed to Send Inquiry
                     </h4>
-                    <p className="text-xs text-slate-600 mb-4 leading-relaxed font-sans">
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-sans">
                       We were unable to deliver your email inquiry right now. Please try calling us directly at <a href="tel:9116304006" className="font-bold text-ink-navy underline">91163 04006</a> or connect via WhatsApp below.
                     </p>
                     {whatsappUrl && (
@@ -395,37 +416,37 @@ export default function InquiryModal({
                         href={whatsappUrl} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-wider py-3 px-4 rounded-sm transition-colors border border-emerald-600 shadow-sm mb-3"
+                        className="inline-flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-wider h-[52px] px-4 rounded-lg transition-colors border border-emerald-600 shadow-md mt-2"
                       >
                         💬 Connect via WhatsApp Instead
                       </a>
                     )}
                     <button 
                       onClick={resetForm}
-                      className="mt-3 font-mono text-[10px] uppercase tracking-wider text-slate-600 hover:text-slate-900 hover:underline block mx-auto font-bold text-center cursor-pointer"
+                      className="mt-3 font-mono text-xs uppercase tracking-wider text-slate-600 hover:text-slate-900 hover:underline block mx-auto font-bold text-center cursor-pointer pt-1"
                     >
                       ← Try Again
                     </button>
                   </div>
                 ) : (
-                  <div className="bg-emerald-50/90 border border-emerald-200 text-emerald-800 p-6 rounded-sm text-center my-4">
-                    <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
-                      <span className="text-emerald-600 text-xl font-bold">✓</span>
+                  <div className="bg-emerald-50/90 border border-emerald-200 text-emerald-800 p-6 rounded-xl text-center my-2 space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-2 text-emerald-600 text-xl font-bold">
+                      ✓
                     </div>
-                    <h4 className="font-serif font-bold text-lg text-emerald-900 mb-2">
+                    <h4 className="font-serif font-bold text-lg text-emerald-900">
                       Inquiry Sent Successfully!
                     </h4>
-                    <p className="text-xs text-slate-600 mb-5 leading-relaxed font-sans">
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-sans">
                       Thank you! Your admission inquiry has been successfully submitted to <strong>Ashish Memorial Public Sr. Sec. School</strong>. Our admissions team will get in touch with you shortly.
                     </p>
                     
                     {whatsappUrl && (
-                      <div className="mb-4">
+                      <div className="pt-2">
                         <a 
                           href={whatsappUrl} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-wider py-2.5 px-4 rounded-sm transition-colors border border-emerald-600 shadow-sm"
+                          className="inline-flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-wider h-[52px] px-4 rounded-lg transition-colors border border-emerald-600 shadow-md"
                         >
                           💬 Connect via WhatsApp
                         </a>
@@ -434,22 +455,22 @@ export default function InquiryModal({
                     
                     <button 
                       onClick={resetForm}
-                      className="font-mono text-[10px] uppercase tracking-wider text-slate-600 hover:text-slate-900 hover:underline block mx-auto font-bold text-center cursor-pointer"
+                      className="font-mono text-xs uppercase tracking-wider text-slate-600 hover:text-slate-900 hover:underline block mx-auto font-bold text-center cursor-pointer pt-2"
                     >
                       ← Send Another Inquiry
                     </button>
                   </div>
                 )
               ) : (
-                <form onSubmit={handleInquirySubmit} className="space-y-4 font-sans text-sm">
+                <form onSubmit={handleInquirySubmit} className="space-y-5 font-sans text-sm">
                   {inquiryError && (
-                    <div className="bg-rose-50 border border-rose-100 text-rose-800 p-3 rounded-sm text-xs">
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-lg text-xs sm:text-sm">
                       ⚠️ {inquiryError}
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-xs font-mono text-muted-text uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-sans font-semibold text-body-text uppercase tracking-wider mb-2">
                       Parent / Student Name *
                     </label>
                     <input 
@@ -459,12 +480,12 @@ export default function InquiryModal({
                       placeholder="Parent or Student Name"
                       value={inquiryName}
                       onChange={(e) => setInquiryName(e.target.value)}
-                      className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text disabled:opacity-60 text-sm"
+                      className="w-full bg-white border border-border-custom hover:border-border-custom/80 focus:border-brass-gold focus:ring-2 focus:ring-brass-gold/25 px-4 h-12 rounded-lg transition-all duration-200 outline-none text-body-text disabled:opacity-60 text-sm shadow-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-mono text-muted-text uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-sans font-semibold text-body-text uppercase tracking-wider mb-2">
                       Mobile Number (WhatsApp) *
                     </label>
                     <input 
@@ -482,29 +503,29 @@ export default function InquiryModal({
                         setPhoneTouched(true);
                         setPhoneError(validatePhone(inquiryPhone));
                       }}
-                      className={`w-full bg-ivory-paper border p-2.5 rounded-sm focus:outline-none text-body-text disabled:opacity-60 text-sm ${
-                        phoneTouched && phoneError ? "border-rose-500 focus:border-rose-500 bg-rose-50/20" : "border-border-custom focus:border-brass-gold"
+                      className={`w-full bg-white border px-4 h-12 rounded-lg transition-all duration-200 outline-none text-body-text disabled:opacity-60 text-sm shadow-xs ${
+                        phoneTouched && phoneError ? "border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-rose-50/20" : "border-border-custom hover:border-border-custom/80 focus:border-brass-gold focus:ring-2 focus:ring-brass-gold/25"
                       }`}
                     />
                     {phoneTouched && phoneError && (
-                      <p className="text-xs text-rose-600 font-sans mt-1">
+                      <p className="text-xs text-rose-600 font-sans mt-1.5 font-medium">
                         ⚠️ {phoneError}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs font-mono text-muted-text uppercase tracking-wider">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-xs font-sans font-semibold text-body-text uppercase tracking-wider">
                         Email Address *
                       </label>
                       {otpVerified && (
-                        <span className="font-mono text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
+                        <span className="font-mono text-[10px] text-emerald-700 font-bold bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md flex items-center gap-1">
                           ✓ Verified
                         </span>
                       )}
                     </div>
-                    <div className="relative flex gap-2">
+                    <div className="relative flex gap-2.5">
                       <input 
                         type="email" 
                         required
@@ -526,12 +547,12 @@ export default function InquiryModal({
                           setEmailTouched(true);
                           setEmailError(validateEmail(inquiryEmail));
                         }}
-                        className={`w-full bg-ivory-paper border p-2.5 rounded-sm focus:outline-none text-body-text disabled:opacity-80 text-sm ${
+                        className={`w-full bg-white border px-4 h-12 rounded-lg transition-all duration-200 outline-none text-body-text disabled:opacity-80 text-sm shadow-xs ${
                           emailTouched && emailError
-                            ? "border-rose-500 focus:border-rose-500 bg-rose-50/20"
+                            ? "border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-rose-50/20"
                             : otpVerified
                             ? "border-emerald-500 bg-emerald-50/20"
-                            : "border-border-custom focus:border-brass-gold"
+                            : "border-border-custom hover:border-border-custom/80 focus:border-brass-gold focus:ring-2 focus:ring-brass-gold/25"
                         }`}
                       />
                       {!otpVerified && (
@@ -539,10 +560,10 @@ export default function InquiryModal({
                           type="button"
                           onClick={handleSendOtp}
                           disabled={otpSending || Boolean(validateEmail(inquiryEmail)) || !inquiryEmail.trim()}
-                          className="bg-brass-gold text-ink-navy hover:bg-brass-gold/90 font-mono text-xs font-bold uppercase tracking-wider px-3.5 rounded-sm transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1"
+                          className="bg-brass-gold text-ink-navy hover:bg-gold-hover font-mono text-xs font-bold uppercase tracking-wider px-4 h-12 rounded-lg transition-all duration-200 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1 shadow-xs"
                         >
                           {otpSending ? (
-                            <span className="w-3 h-3 border-2 border-ink-navy/30 border-t-ink-navy rounded-full animate-spin"></span>
+                            <span className="w-3.5 h-3.5 border-2 border-ink-navy/30 border-t-ink-navy rounded-full animate-spin"></span>
                           ) : otpSent ? (
                             "Resend OTP"
                           ) : (
@@ -552,14 +573,14 @@ export default function InquiryModal({
                       )}
                     </div>
                     {emailTouched && emailError && (
-                      <p className="text-xs text-rose-600 font-sans mt-1">
+                      <p className="text-xs text-rose-600 font-sans mt-1.5 font-medium">
                         ⚠️ {emailError}
                       </p>
                     )}
 
                     {/* OTP Entry Card */}
                     {otpSent && !otpVerified && (
-                      <div className="mt-3 bg-amber-50/80 border border-amber-200 p-3 rounded-sm space-y-2">
+                      <div className="mt-3.5 bg-amber-50/90 border border-amber-200 p-4 rounded-xl space-y-2.5">
                         <div className="flex justify-between items-center">
                           <span className="font-mono text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
                             🔒 Enter 6-Digit Verification Code
@@ -579,20 +600,20 @@ export default function InquiryModal({
                             </button>
                           )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2.5">
                           <input
                             type="text"
                             maxLength={6}
                             placeholder="6-Digit Code"
                             value={otpCode}
                             onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                            className="w-full bg-white border border-amber-300 p-2 rounded-sm font-mono text-center font-bold tracking-widest text-base text-ink-navy focus:outline-none focus:border-maroon"
+                            className="w-full bg-white border border-amber-300 px-3.5 h-11 rounded-lg font-mono text-center font-bold tracking-widest text-base text-ink-navy focus:outline-none focus:border-maroon shadow-xs"
                           />
                           <button
                             type="button"
                             onClick={handleVerifyOtp}
                             disabled={otpVerifying || otpCode.length !== 6}
-                            className="bg-maroon hover:bg-maroon/90 text-white font-mono text-xs font-bold uppercase tracking-wider px-4 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center shrink-0"
+                            className="bg-maroon hover:bg-maroon/90 text-white font-mono text-xs font-bold uppercase tracking-wider px-4 h-11 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center shrink-0 shadow-xs"
                           >
                             {otpVerifying ? (
                               <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
@@ -605,19 +626,19 @@ export default function InquiryModal({
                     )}
 
                     {otpError && (
-                      <p className="text-xs text-rose-600 font-sans mt-1">
+                      <p className="text-xs text-rose-600 font-sans mt-1.5 font-medium">
                         ⚠️ {otpError}
                       </p>
                     )}
                     {otpSuccess && (
-                      <p className="text-xs text-emerald-700 font-sans mt-1 font-medium">
+                      <p className="text-xs text-emerald-700 font-sans mt-1.5 font-medium">
                         ✓ {otpSuccess}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-mono text-muted-text uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-sans font-semibold text-body-text uppercase tracking-wider mb-2">
                       Message / Desired Stream or Class
                     </label>
                     <textarea 
@@ -626,35 +647,33 @@ export default function InquiryModal({
                       placeholder="Desired class, stream, or any specific query"
                       value={inquiryMessage}
                       onChange={(e) => setInquiryMessage(e.target.value)}
-                      className="w-full bg-ivory-paper border border-border-custom p-2.5 rounded-sm focus:outline-none focus:border-brass-gold text-body-text resize-none disabled:opacity-60 text-sm"
+                      className="w-full bg-white border border-border-custom hover:border-border-custom/80 focus:border-brass-gold focus:ring-2 focus:ring-brass-gold/25 p-3.5 rounded-lg transition-all duration-200 outline-none text-body-text resize-none disabled:opacity-60 text-sm shadow-xs"
                     />
                   </div>
 
-                  <motion.button 
-                    whileHover={{ scale: inquirySubmitting || Boolean(phoneError || emailError || !inquiryName || !inquiryPhone || !inquiryEmail) ? 1 : 1.02 }}
-                    whileTap={{ scale: inquirySubmitting || Boolean(phoneError || emailError || !inquiryName || !inquiryPhone || !inquiryEmail) ? 1 : 0.97 }}
+                  <button 
                     type="submit"
                     disabled={inquirySubmitting || Boolean(phoneError || emailError || !inquiryName || !inquiryPhone || !inquiryEmail)}
-                    className="w-full bg-ink-navy text-white hover:bg-navy-light font-mono text-xs font-bold uppercase tracking-wider py-3 rounded-sm transition-colors border border-ink-navy shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    className="h-[52px] w-full bg-brass-gold hover:bg-gold-hover text-ink-navy font-mono text-sm font-bold uppercase tracking-wider rounded-lg shadow-md hover:shadow-lg hover:shadow-brass-gold/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {inquirySubmitting ? (
                       <>
-                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        <span className="w-4 h-4 border-2 border-ink-navy/30 border-t-ink-navy rounded-full animate-spin"></span>
                         {formContext === "counselling" ? "Booking Counselling Session..." : "Sending Inquiry..."}
                       </>
                     ) : !otpVerified ? (
                       <>
-                        <Send className="w-3.5 h-3.5" />
+                        <Send className="w-4 h-4" />
                         {formContext === "counselling" ? "VERIFY EMAIL & BOOK COUNSELLING" : "VERIFY EMAIL & SUBMIT INQUIRY"}
                       </>
                     ) : (
                       <>
-                        <Send className="w-3.5 h-3.5" />
+                        <Send className="w-4 h-4" />
                         {formContext === "counselling" ? "BOOK COUNSELLING SESSION" : "SUBMIT & SEND INQUIRY"}
                       </>
                     )}
-                  </motion.button>
-                  <p className="text-[10px] text-muted-text text-center italic mt-2">
+                  </button>
+                  <p className="text-[11px] text-muted-text text-center italic mt-2.5 font-sans">
                     Inquiry will be saved securely and dispatched to the administrator instantly.
                   </p>
                 </form>
@@ -662,11 +681,11 @@ export default function InquiryModal({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-500 font-mono shrink-0">
-              <span>School Office: 91163 04006</span>
+            <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-200/80 flex justify-between items-center text-xs text-slate-500 font-mono shrink-0">
+              <span className="font-medium">School Office: 91163 04006</span>
               <button
                 onClick={onClose}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1 rounded font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-1.5 rounded-md font-bold uppercase tracking-wider transition-colors cursor-pointer"
               >
                 Close
               </button>

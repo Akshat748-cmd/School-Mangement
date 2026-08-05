@@ -6,31 +6,89 @@
   --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-ink-navy: #0A1931;       /* Rich Deep Navy Blue */
-  --color-navy-light: #15305B;     /* Elegant Mid-Navy */
-  --color-brass-gold: #D4AF37;     /* High-quality Metallic Gold */
-  --color-maroon: #921A31;         /* Premium Crimson Red */
-  --color-ivory-paper: #FAFBFC;    /* Modern, crisp light background */
-  --color-muted-board: #F1F5F9;    /* Clean Slate 100 panel */
-  --color-border-custom: #E2E8F0;  /* Crisp Slate 200 borders */
+  /* Brand Palette Tokens */
+  --color-ink-navy: #0A1931;       /* Deep Academic Navy Blue */
+  --color-navy-surface: #142442;   /* Elevated Dark Navy */
+  --color-navy-light: #15305B;     /* Mid-Navy Accent */
+  --color-brass-gold: #C9A227;     /* Metallic Brass Gold */
+  --color-gold-hover: #B08B1E;     /* Deepened Gold State */
+  --color-maroon: #7A2331;         /* Academic Crimson Maroon */
+  --color-ivory-paper: #FAFBFC;    /* Warm Ivory Surface */
+  --color-muted-board: #F1F5F9;    /* Clean Slate 100 Panel */
+  --color-border-custom: #E2E8F0;  /* Slate 200 Borders */
+  --color-border-accent: rgba(201, 162, 39, 0.25); /* Gold Tinted Border */
+
+  /* Typography Colors */
+  --color-body-text: #0F172A;      /* High-contrast Slate 900 */
+  --color-muted-text: #475569;     /* Readable Slate 600 */
   
-  --color-body-text: #1E293B;      /* Highly readable Slate 800 */
-  --color-muted-text: #475569;     /* Slate 600 for secondary text */
+  /* Semantic Status Tokens */
+  --color-success: #166534;
+  --color-warning: #9A3412;
+  --color-error: #991B1B;
+
+  /* Standard Border Radii Tokens */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Elevation & Shadow Tokens */
+  --shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-floating: 0 12px 32px rgba(10, 25, 49, 0.16), 0 4px 8px rgba(10, 25, 49, 0.08);
+  --shadow-gold-glow: 0 4px 16px rgba(201, 162, 39, 0.35);
 }
 
-/* Custom school styling and subtle adjustments */
+/* Base Body Styles & Global Accessibility */
 html, body {
   background-color: var(--color-ivory-paper);
   color: var(--color-body-text);
   font-family: var(--font-sans);
   scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom style for dashed board border */
+/* Global Focus Outline System for Accessibility */
+*:focus-visible {
+  outline: 2px solid #C9A227;
+  outline-offset: 2px;
+}
+
+/* Reusable Glassmorphism Overlay Utility */
+.glass-panel {
+  background-color: rgba(10, 25, 49, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.glass-card-light {
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+/* Custom dashed divider styling */
 .dashed-divider {
-  background-image: linear-gradient(to right, #D4AF37 50%, rgba(255, 255, 255, 0) 0%);
+  background-image: linear-gradient(to right, #C9A227 50%, rgba(255, 255, 255, 0) 0%);
   background-position: bottom;
   background-size: 10px 1px;
   background-repeat: repeat-x;
 }
 
+/* Reduced Motion Override for Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  html, body {
+    scroll-behavior: auto !important;
+  }
+  
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

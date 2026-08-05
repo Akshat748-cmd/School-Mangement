@@ -3,29 +3,54 @@ import { motion, AnimatePresence } from "motion/react";
 import { X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 
 export const galleryItems = [
+  // Toppers & Milestones (top-1 to top-5 + neet-achiever)
   {
-    id: "news-1",
-    title: "Dainik Bhaskar Merit Feature",
-    subtitle: "Dainik Bhaskar newspaper clipping covering the outstanding academic performance and topper merit list of our board students.",
-    category: "news",
-    localSrc: "/assets/news-1.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    id: "top-1",
+    title: "Board Merit Position Topper (Top Rank 1)",
+    subtitle: "Celebrating our outstanding student securing a top district rank in the Rajasthan Board senior secondary examinations.",
+    category: "milestones",
+    localSrc: "/assets/top-1.jpeg",
+    fallbackSrc: "/assets/top-1.jpeg"
   },
   {
-    id: "news-2",
-    title: "Earth Day Group Exhibition",
-    subtitle: "Students holding a globe model and awareness posters stand together with faculty in front of the campus building to commemorate Earth Day.",
-    category: "news",
-    localSrc: "/assets/news-2.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    id: "top-2",
+    title: "State Board Rank Achievers (Top Rank 2)",
+    subtitle: "Honoring our high-scoring scholars who achieved remarkable percentages in the annual board examinations.",
+    category: "milestones",
+    localSrc: "/assets/top-2.jpeg",
+    fallbackSrc: "/assets/top-2.jpeg"
   },
   {
-    id: "news-3",
-    title: "School Staff News Portrait",
-    subtitle: "A group photograph of school faculty members, wearing elegant coordinated uniforms, printed in the regional Hindi news media.",
-    category: "news",
-    localSrc: "/assets/news-3.jpg",
-    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    id: "top-3",
+    title: "NEET Exam Achievers (Top Rank 3)",
+    subtitle: "Proudly celebrating our future medical professionals who qualified the NEET exam with exceptional marks and top All India Ranks (AIR).",
+    category: "milestones",
+    localSrc: "/assets/top-3.jpeg",
+    fallbackSrc: "/assets/top-3.jpeg"
+  },
+  {
+    id: "top-4",
+    title: "JEE Advanced Toppers (Top Rank 4)",
+    subtitle: "Celebrating the outstanding success of our engineering aspirants qualifying the prestigious JEE Advanced exam with top national ranks.",
+    category: "milestones",
+    localSrc: "/assets/top-4.jpeg",
+    fallbackSrc: "/assets/top-4.jpeg"
+  },
+  {
+    id: "top-5",
+    title: "Board Merit Distinction Ranker (Top Rank 5)",
+    subtitle: "Celebrating our top achiever who scored high honors and distinctions in the board examinations.",
+    category: "milestones",
+    localSrc: "/assets/top-5.jpeg",
+    fallbackSrc: "/assets/top-5.jpeg"
+  },
+  {
+    id: "neet-achiever",
+    title: "Piyush Bansal — NEET AIR 617 Achiever",
+    subtitle: "Piyush Bansal achieved All India Rank (AIR) 617 in NEET 2026 through AMPS in-house integrated foundation curriculum.\n\n🏆 NEET ACHIEVER:\n• Piyush Bansal — All India Rank (AIR) 617\n\n📚 PREPARATION CURRICULUM:\n• Qualified with exceptional scores through our integrated school-level foundation course.\n• In-house coaching curriculum including separate evaluation tests and study modules.\n• 100% doubt resolution squads to ensure medical exam readiness without requiring separate external tuition.",
+    category: "milestones",
+    localSrc: "/assets/neet.jpeg",
+    fallbackSrc: "/assets/neet.jpeg"
   },
   {
     id: "award-1",
@@ -58,6 +83,54 @@ export const galleryItems = [
     category: "awards",
     localSrc: "/assets/award.jpeg",
     fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "news-1",
+    title: "Dainik Bhaskar Merit Feature",
+    subtitle: "Dainik Bhaskar newspaper clipping covering the outstanding academic performance and topper merit list of our board students.",
+    category: "news",
+    localSrc: "/assets/news-1.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "news-2",
+    title: "Earth Day Group Exhibition",
+    subtitle: "Students holding a globe model and awareness posters stand together with faculty in front of the campus building to commemorate Earth Day.",
+    category: "news",
+    localSrc: "/assets/news-2.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "news-3",
+    title: "School Staff News Portrait",
+    subtitle: "A group photograph of school faculty members, wearing elegant coordinated uniforms, printed in the regional Hindi news media.",
+    category: "news",
+    localSrc: "/assets/news-3.jpg",
+    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "news-4",
+    title: "Rajasthan Patrika Merit Feature",
+    subtitle: "Press clipping from Rajasthan Patrika celebrating AMPS students who secured outstanding positions in state board examinations.",
+    category: "news",
+    localSrc: "/assets/news-4.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "news-5",
+    title: "Academic Milestone Announcement",
+    subtitle: "Local Hindi media covering the exceptional success rate and toppers list of AMPS, establishing school leadership.",
+    category: "news",
+    localSrc: "/assets/news-5.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "news-6",
+    title: "District Science Fair Victory Feature",
+    subtitle: "Press clipping celebrating the triumph of our 6 students in the district-level science fair, including projects on Waste Management (Ayush Jain, Class 9), Models for Disabled Children (Gagan Gupta), and Mathematical Models (Poorvi Jindal).",
+    category: "news",
+    localSrc: "/assets/news-6.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
     id: "sports-1",
@@ -116,62 +189,6 @@ export const galleryItems = [
     fallbackSrc: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
-    id: "science-1",
-    title: "Student Showcasing Exhibition Model",
-    subtitle: "A student in school uniform presenting her town-planning model and geography project to evaluators at a school exhibition.",
-    category: "science",
-    localSrc: "/assets/science-fair-1.jpg",
-    fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "science-2",
-    title: "District Science Seminar Winners",
-    subtitle: "High-school students holding up their official certificates of achievement alongside their science teachers after a successful seminar presentation.",
-    category: "science",
-    localSrc: "/assets/science-fair-2.jpg",
-    fallbackSrc: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "science-3",
-    title: "Patriotic Painting & Poster Exhibition",
-    subtitle: "A student proudly displaying his tricolor artwork featuring Mahatma Gandhi, peace doves, and national integration themes.",
-    category: "science",
-    localSrc: "/assets/science-fair-3.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "top-1",
-    title: "Board Merit Position Topper",
-    subtitle: "Celebrating our outstanding student securing a top district rank in the Rajasthan Board senior secondary examinations.",
-    category: "milestones",
-    localSrc: "/assets/top-1.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "top-2",
-    title: "State Board Rank Achievers",
-    subtitle: "Honoring our high-scoring scholars who achieved remarkable percentages in the annual board examinations.",
-    category: "milestones",
-    localSrc: "/assets/top-2.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "top-3",
-    title: "NEET 2025 Exam Achievers",
-    subtitle: "Proudly celebrating our future medical professionals who qualified the NEET 2025 exam with exceptional marks and top All India Ranks (AIR).",
-    category: "milestones",
-    localSrc: "/assets/top-3.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "top-4",
-    title: "JEE Advanced 2025 Toppers",
-    subtitle: "Celebrating the outstanding success of our engineering aspirants qualifying the prestigious JEE Advanced 2025 exam with top national ranks.",
-    category: "milestones",
-    localSrc: "/assets/top-4.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
     id: "cultural-6",
     title: "Fancy Dress Competition",
     subtitle: "Our kindergarten and primary block students showcasing creative costumes representing national leaders, professionals, and social themes.",
@@ -204,44 +221,28 @@ export const galleryItems = [
     fallbackSrc: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
-    id: "news-4",
-    title: "Rajasthan Patrika Merit Feature",
-    subtitle: "Press clipping from Rajasthan Patrika celebrating AMPS students who secured outstanding positions in state board examinations.",
-    category: "news",
-    localSrc: "/assets/news-4.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    id: "science-1",
+    title: "Student Showcasing Exhibition Model",
+    subtitle: "A student in school uniform presenting her town-planning model and geography project to evaluators at a school exhibition.",
+    category: "science",
+    localSrc: "/assets/science-fair-1.jpg",
+    fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
-    id: "news-5",
-    title: "Academic Milestone Announcement",
-    subtitle: "Local Hindi media covering the exceptional success rate and toppers list of AMPS, establishing school leadership.",
-    category: "news",
-    localSrc: "/assets/news-5.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
+    id: "science-2",
+    title: "District Science Seminar Winners",
+    subtitle: "High-school students holding up their official certificates of achievement alongside their science teachers after a successful seminar presentation.",
+    category: "science",
+    localSrc: "/assets/science-fair-2.jpg",
+    fallbackSrc: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
-    id: "news-6",
-    title: "District Science Fair Victory Feature",
-    subtitle: "Press clipping celebrating the triumph of our 6 students in the district-level science fair, including projects on Waste Management (Ayush Jain, Class 9), Models for Disabled Children (Gagan Gupta), and Mathematical Models (Poorvi Jindal).",
-    category: "news",
-    localSrc: "/assets/news-6.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "top-5",
-    title: "Board Merit Distinction Ranker",
-    subtitle: "Celebrating our top achiever who scored high honors and distinctions in the board examinations.",
-    category: "milestones",
-    localSrc: "/assets/top-5.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800&h=600"
-  },
-  {
-    id: "neet-achiever",
-    title: "NEET Exam Success Achievers",
-    subtitle: "Celebrating the outstanding results of our students in the National Eligibility cum Entrance Test (NEET) 2026.\n\n🏆 NEET ACHIEVER:\n• Piyush Bansal — All India Rank (AIR) 617\n\n📚 PREPARATION CURRICULUM:\n• Qualified with exceptional scores through our integrated school-level foundation course.\n• In-house coaching curriculum including separate evaluation tests and study modules.\n• 100% doubt resolution squads to ensure medical exam readiness without requiring separate external tuition.",
-    category: "milestones",
-    localSrc: "/assets/neet.jpeg",
-    fallbackSrc: "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&q=80&w=800&h=600"
+    id: "science-3",
+    title: "Patriotic Painting & Poster Exhibition",
+    subtitle: "A student proudly displaying his tricolor artwork featuring Mahatma Gandhi, peace doves, and national integration themes.",
+    category: "science",
+    localSrc: "/assets/science-fair-3.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
     id: "science-4",
@@ -321,23 +322,44 @@ export default function Gallery({
       .catch(err => console.error("Error fetching live gallery items:", err));
   }, []);
 
-  const allCombinedItems = liveItems.length > 0 ? liveItems : galleryItems;
+  const allCombinedItems = [...liveItems, ...galleryItems];
 
   const getDisplayedGalleryItems = () => {
     if (galleryFilter !== "all") {
       return allCombinedItems.filter(item => item.category === galleryFilter);
     }
-    const categoriesSeen = new Set<string>();
-    return allCombinedItems.filter(item => {
-      if (categoriesSeen.has(item.category)) {
-        return false;
-      }
-      categoriesSeen.add(item.category);
-      return true;
-    });
+    return allCombinedItems;
   };
 
   const displayedGalleryItems = getDisplayedGalleryItems();
+
+  React.useEffect(() => {
+    if (isMediaModalOpen || selectedGalleryImg) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedGalleryImg) {
+        if (e.key === "Escape") {
+          setSelectedGalleryImg(null);
+        } else if (e.key === "ArrowLeft") {
+          navigateLightbox("prev");
+        } else if (e.key === "ArrowRight") {
+          navigateLightbox("next");
+        }
+      } else if (isMediaModalOpen && e.key === "Escape") {
+        setIsMediaModalOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMediaModalOpen, selectedGalleryImg, displayedGalleryItems]);
 
   const navigateLightbox = (direction: "prev" | "next") => {
     if (!selectedGalleryImg) return;
@@ -403,8 +425,8 @@ export default function Gallery({
                   <h3 className="font-serif text-2xl text-ink-navy font-bold tracking-tight sm:hidden mb-2">
                     School Events & News Coverage
                   </h3>
-                  <p className="text-muted-text text-xs md:text-sm leading-relaxed">
-                    Explore media prints, regional news coverage, and official achievements of AMPS in leading Hindi newspapers alongside academic highlights.
+                  <p className="text-muted-text text-xs md:text-sm leading-relaxed font-sans">
+                    Explore media prints, regional news coverage, toppers and milestones of AMPS alongside academic highlights.
                   </p>
                   <div className="w-12 h-[2px] bg-brass-gold mx-auto mt-3"></div>
                 </div>
@@ -442,7 +464,7 @@ export default function Gallery({
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15)" }}
+                        whileHover={{ scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15)" }}
                         whileTap={{ scale: 0.98 }}
                         transition={{ duration: 0.2 }}
                         key={item.id}
@@ -456,7 +478,7 @@ export default function Gallery({
                             alt={item.title}
                             loading="lazy"
                             onError={() => setGalleryImgErrors(prev => ({ ...prev, [item.id]: true }))}
-                            className="w-full h-auto transition-transform duration-500 group-hover:scale-102"
+                            className="w-full h-auto transition-transform duration-500 group-hover:scale-105"
                           />
 
                           {/* Hover Overlay Icon */}
@@ -472,7 +494,7 @@ export default function Gallery({
                               item.category === "sports" ? "Athletics" :
                                 item.category === "cultural" ? "Cultural" :
                                   item.category === "science" ? "Science" :
-                                    item.category === "milestones" ? "Milestone" : "News Coverage"}
+                                    item.category === "milestones" ? "Topper & Milestone" : "News Coverage"}
                           </div>
                         </div>
 
@@ -520,7 +542,7 @@ export default function Gallery({
               exit={{ scale: 0.95, y: 15 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
               className="relative max-w-[95vw] md:max-w-4xl w-full max-h-[90vh] md:max-h-none overflow-y-auto md:overflow-hidden bg-ink-navy border border-white/10 rounded-sm overflow-hidden shadow-2xl flex flex-col md:flex-row"
-              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside content
+              onClick={(e) => e.stopPropagation()}
             >
 
               {/* Image Column */}
@@ -557,7 +579,7 @@ export default function Gallery({
                       selectedGalleryImg.category === "sports" ? "Athletics" :
                         selectedGalleryImg.category === "cultural" ? "Cultural Event" :
                           selectedGalleryImg.category === "science" ? "Science & Lab" :
-                            selectedGalleryImg.category === "milestones" ? "Academic Milestone" : "News Coverage"}
+                            selectedGalleryImg.category === "milestones" ? "Topper & Milestone" : "News Coverage"}
                   </span>
                   <h3 className="font-serif text-xl font-bold leading-tight tracking-tight text-white mb-3">
                     {selectedGalleryImg.title}
