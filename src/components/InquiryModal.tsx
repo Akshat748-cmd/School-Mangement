@@ -18,7 +18,6 @@ export default function InquiryModal({
   prefillMessage,
   formContext = "admission"
 }: InquiryModalProps) {
-  console.log("[InquiryModal] formContext:", formContext);
   const initialMsg = prefillMessage || presetMessage || "";
   const [inquiryName, setInquiryName] = useState("");
   const [inquiryPhone, setInquiryPhone] = useState("");
@@ -61,25 +60,21 @@ export default function InquiryModal({
     const trimmed = val.trim().toLowerCase();
     if (!trimmed) return "Email address is required.";
 
-    // 1. Strict format check: user@domain.2+letter TLD
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(trimmed)) {
       return "Please enter a valid email address (e.g. name@gmail.com).";
     }
 
-    // 2. Reject consecutive dots or invalid dots in domain
     const parts = trimmed.split("@");
     const domain = parts[1] || "";
     if (domain.includes("..") || domain.startsWith(".") || domain.endsWith(".")) {
       return "Email domain format is invalid.";
     }
 
-    // 3. Check for common domain typos (e.g. gmai.com, gmial.com)
     if (COMMON_DOMAIN_TYPOS[domain]) {
       return `Did you mean ${parts[0]}@${COMMON_DOMAIN_TYPOS[domain]}?`;
     }
 
-    // 4. Validate Top-Level Domain (TLD) length and characters
     const tld = domain.split(".").pop();
     if (!tld || tld.length < 2 || !/^[a-z]+$/.test(tld)) {
       return "Please enter a valid domain extension (e.g. .com, .in, .org).";
@@ -88,37 +83,37 @@ export default function InquiryModal({
     return null;
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     const msg = prefillMessage || presetMessage;
     if (msg !== undefined) {
       setInquiryMessage(msg);
     }
   }, [prefillMessage, presetMessage]);
+
   const [inquirySubmitted, setInquirySubmitted] = useState(false);
   const [inquirySubmitting, setInquirySubmitting] = useState(false);
   const [inquiryError, setInquiryError] = useState<string | null>(null);
-  
-  const [dispatchStatus, setDispatchStatus] = useState("Pending");
-  const [whatsappUrl, setWhatsappUrl] = useState("");
 
-  // OTP Verification States
+  const [emailSent, setEmailSent] = useState(false);
+  const [dbSaved, setDbSaved] = useState(false);
+  const [dispatchStatus, setDispatchStatus] = useState<string>("");
+  const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
+
   const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
 
-  useEffect(() => {
-    let interval: any = null;
+  React.useEffect(() => {
+    let interval: any;
     if (resendTimer > 0) {
       interval = setInterval(() => {
         setResendTimer((prev) => prev - 1);
       }, 1000);
-    } else {
-      clearInterval(interval);
     }
     return () => clearInterval(interval);
   }, [resendTimer]);
@@ -144,15 +139,10 @@ export default function InquiryModal({
   }, [isOpen, onClose]);
 
   const handleSendOtp = async () => {
-    setPhoneTouched(true);
-    setEmailTouched(true);
-    const pErr = validatePhone(inquiryPhone);
-    const eErr = validateEmail(inquiryEmail);
-    setPhoneError(pErr);
-    setEmailError(eErr);
-
-    if (!inquiryName || pErr || eErr) {
-      setOtpError("Please enter a valid Name, Mobile number, and Email address first.");
+    const emailErr = validateEmail(inquiryEmail);
+    if (emailErr) {
+      setEmailTouched(true);
+      setEmailError(emailErr);
       return;
     }
 
@@ -161,61 +151,53 @@ export default function InquiryModal({
     setOtpSuccess(null);
 
     try {
-      const response = await fetch("/api/send-otp", {
+      const res = await fetch("/api/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: inquiryEmail.trim(),
-          name: inquiryName,
-          formContext
-        })
+        body: JSON.stringify({ email: inquiryEmail.trim() })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const data = await res.json();
+
+      if (data.success) {
         setOtpSent(true);
-        setResendTimer(60);
-        setOtpSuccess(`OTP code sent to ${inquiryEmail.trim()}. Please check your email inbox.`);
+        setResendTimer(30);
+        setOtpSuccess(`OTP verification code sent to ${inquiryEmail.trim()}`);
       } else {
-        throw new Error(data.message || "Failed to send OTP code.");
+        setOtpError(data.message || "Failed to send OTP. Please check your email.");
       }
     } catch (err: any) {
-      console.error("[OTP Send Error]", err);
-      setOtpError(err.message || "Could not send OTP. Please try again.");
+      setOtpError("Network error while sending OTP. Please try again.");
     } finally {
       setOtpSending(false);
     }
   };
 
   const handleVerifyOtp = async () => {
-    if (!otpCode || otpCode.trim().length !== 6) {
-      setOtpError("Please enter the 6-digit OTP verification code.");
+    if (!otpCode || otpCode.length !== 6) {
+      setOtpError("Please enter a valid 6-digit OTP code.");
       return;
     }
 
     setOtpVerifying(true);
     setOtpError(null);
-    setOtpSuccess(null);
 
     try {
-      const response = await fetch("/api/verify-otp", {
+      const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: inquiryEmail.trim(),
-          otp: otpCode.trim()
-        })
+        body: JSON.stringify({ email: inquiryEmail.trim(), otp: otpCode.trim() })
       });
-      const data = await response.json();
-      if (response.ok && data.verified) {
+      const data = await res.json();
+
+      if (res.ok && (data.verified || data.success)) {
         setOtpVerified(true);
         setOtpError(null);
-        setOtpSuccess("Email address verified successfully!");
+        setOtpSuccess("Email verified successfully! You can now submit your inquiry.");
       } else {
-        throw new Error(data.message || "Incorrect OTP code.");
+        setOtpError(data.message || "Invalid OTP code. Please try again.");
       }
     } catch (err: any) {
-      console.error("[OTP Verification Error]", err);
-      setOtpError(err.message || "Invalid OTP code. Please try again.");
+      setOtpError("Network error while verifying OTP. Please try again.");
     } finally {
       setOtpVerifying(false);
     }

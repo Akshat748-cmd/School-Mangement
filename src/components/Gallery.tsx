@@ -1,6 +1,19 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
+import { TiltCard } from "./ui/TiltCard";
+import { SkeletonBlock } from "./ui/Skeleton";
+
+export const deriveCategory = (imageUrl: string, fallbackCategory: string = "general"): string => {
+  const url = (imageUrl || "").toLowerCase();
+  if (url.includes("/top-") || url.includes("/neet")) return "milestones";
+  if (url.includes("/award")) return "awards";
+  if (url.includes("/sports")) return "sports";
+  if (url.includes("/cultural")) return "cultural";
+  if (url.includes("/science")) return "science";
+  if (url.includes("/news") || url.includes("/school-building")) return "news";
+  return fallbackCategory || "general";
+};
 
 export const galleryItems = [
   // Toppers & Milestones (top-1 to top-5 + neet-achiever)
@@ -45,6 +58,22 @@ export const galleryItems = [
     fallbackSrc: "/assets/top-5.jpeg"
   },
   {
+    id: "top-6",
+    title: "Senior Secondary Academic Achievers (Top Rank 6)",
+    subtitle: "Celebrating our high-scoring senior secondary scholars for exemplary performance in annual board examinations.",
+    category: "milestones",
+    localSrc: "/assets/top-6.jpeg",
+    fallbackSrc: "/assets/top-6.jpeg"
+  },
+  {
+    id: "top-7",
+    title: "Subject Distinction Ranker (Top Rank 7)",
+    subtitle: "Honoring scholars securing 100% marks and top distinction in core science & mathematics board papers.",
+    category: "milestones",
+    localSrc: "/assets/top-7.jpeg",
+    fallbackSrc: "/assets/top-7.jpeg"
+  },
+  {
     id: "neet-achiever",
     title: "Piyush Bansal — NEET AIR 617 Achiever",
     subtitle: "Piyush Bansal achieved All India Rank (AIR) 617 in NEET 2026 through AMPS in-house integrated foundation curriculum.\n\n🏆 NEET ACHIEVER:\n• Piyush Bansal — All India Rank (AIR) 617\n\n📚 PREPARATION CURRICULUM:\n• Qualified with exceptional scores through our integrated school-level foundation course.\n• In-house coaching curriculum including separate evaluation tests and study modules.\n• 100% doubt resolution squads to ensure medical exam readiness without requiring separate external tuition.",
@@ -66,6 +95,14 @@ export const galleryItems = [
     subtitle: "School management team and principal presenting achievement shields and trophies to top ranking merit students.",
     category: "awards",
     localSrc: "/assets/award-2.jpg",
+    fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
+    id: "award-3",
+    title: "District Level Achievement Felicitation",
+    subtitle: "Distinguished civic leaders honoring AMPS students with shields and laurels for winning top positions in district talent competitions.",
+    category: "awards",
+    localSrc: "/assets/award-3.jpeg",
     fallbackSrc: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
@@ -221,6 +258,14 @@ export const galleryItems = [
     fallbackSrc: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800&h=600"
   },
   {
+    id: "cultural-10",
+    title: "Folk Dance & Annual Cultural Gala",
+    subtitle: "Colorful traditional folk dance performances by students celebrating Indian cultural heritage and school foundation day.",
+    category: "cultural",
+    localSrc: "/assets/cultural-10.jpeg",
+    fallbackSrc: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=800&h=600"
+  },
+  {
     id: "science-1",
     title: "Student Showcasing Exhibition Model",
     subtitle: "A student in school uniform presenting her town-planning model and geography project to evaluators at a school exhibition.",
@@ -308,21 +353,47 @@ export default function Gallery({
       .then(res => res.json())
       .then(data => {
         if (data.success && Array.isArray(data.items)) {
-          const mapped = data.items.map((item: any) => ({
-            id: `live-${item.id}`,
-            title: item.title,
-            subtitle: item.subtitle || "",
-            category: item.category || "general",
-            localSrc: item.image_url,
-            fallbackSrc: item.image_url
-          }));
+          const mapped = data.items.map((item: any) => {
+            const category = deriveCategory(item.image_url, item.category);
+            return {
+              id: `live-${item.id}`,
+              title: item.title,
+              subtitle: item.subtitle || "",
+              category,
+              localSrc: item.image_url,
+              fallbackSrc: item.image_url
+            };
+          });
           setLiveItems(mapped);
         }
       })
       .catch(err => console.error("Error fetching live gallery items:", err));
   }, []);
 
-  const allCombinedItems = [...liveItems, ...galleryItems];
+  const allCombinedItems = React.useMemo(() => {
+    const seenSrcs = new Set<string>();
+    const combined: typeof galleryItems = [];
+
+    // Prioritize live database items first
+    for (const item of liveItems) {
+      const srcKey = (item.localSrc || item.fallbackSrc || "").trim().toLowerCase();
+      if (srcKey && !seenSrcs.has(srcKey)) {
+        seenSrcs.add(srcKey);
+        combined.push(item);
+      }
+    }
+
+    // Add static items only if not already present from live database API
+    for (const item of galleryItems) {
+      const srcKey = (item.localSrc || item.fallbackSrc || "").trim().toLowerCase();
+      if (srcKey && !seenSrcs.has(srcKey)) {
+        seenSrcs.add(srcKey);
+        combined.push(item);
+      }
+    }
+
+    return combined;
+  }, [liveItems]);
 
   const getDisplayedGalleryItems = () => {
     if (galleryFilter !== "all") {
@@ -446,8 +517,8 @@ export default function Gallery({
                       key={pill.id}
                       onClick={() => setGalleryFilter(pill.id)}
                       className={`px-3.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider rounded-full border transition-all cursor-pointer ${galleryFilter === pill.id
-                          ? "bg-ink-navy text-white border-ink-navy shadow-sm"
-                          : "bg-white text-muted-text border-border-custom hover:text-ink-navy hover:border-ink-navy"
+                        ? "bg-ink-navy text-white border-ink-navy shadow-sm"
+                        : "bg-white text-muted-text border-border-custom hover:text-ink-navy hover:border-ink-navy"
                         }`}
                     >
                       {pill.label}
@@ -464,49 +535,52 @@ export default function Gallery({
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        whileHover={{ scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15)" }}
+                        whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         transition={{ duration: 0.2 }}
                         key={item.id}
                         className="break-inside-avoid mb-6 group bg-white rounded-sm border border-border-custom overflow-hidden shadow-sm cursor-pointer flex flex-col"
                         onClick={() => setSelectedGalleryImg(item)}
                       >
-                        {/* Photo Container */}
-                        <div className="relative overflow-hidden bg-white">
-                          <img
-                            src={item.localSrc}
-                            alt={item.title}
-                            loading="lazy"
-                            onError={() => setGalleryImgErrors(prev => ({ ...prev, [item.id]: true }))}
-                            className="w-full h-auto transition-transform duration-500 group-hover:scale-105"
-                          />
+                        <TiltCard glare={false}>
+                          {/* Photo Container */}
+                          <div className="relative overflow-hidden bg-slate-100 min-h-[160px]">
+                            <motion.img
+                              layoutId={`gallery-img-${item.id}`}
+                              src={item.localSrc}
+                              alt={item.title}
+                              loading="lazy"
+                              onError={() => setGalleryImgErrors(prev => ({ ...prev, [item.id]: true }))}
+                              className="w-full h-auto transition-transform duration-500 group-hover:scale-105"
+                            />
 
-                          {/* Hover Overlay Icon */}
-                          <div className="absolute inset-0 bg-ink-navy/45 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                            <div className="w-9 h-9 rounded-full bg-white/90 text-ink-navy flex items-center justify-center shadow-md transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                              <ZoomIn className="w-4.5 h-4.5" />
+                            {/* Hover Overlay Icon */}
+                            <div className="absolute inset-0 bg-ink-navy/45 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                              <div className="w-9 h-9 rounded-full bg-white/90 text-ink-navy flex items-center justify-center shadow-md transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                                <ZoomIn className="w-4.5 h-4.5" />
+                              </div>
+                            </div>
+
+                            {/* Category Tag pill overlay */}
+                            <div className="absolute top-3 left-3 bg-white/95 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest font-semibold border border-border-custom rounded-sm text-maroon shadow-sm">
+                              {item.category === "awards" ? "Award Meet" :
+                                item.category === "sports" ? "Athletics" :
+                                  item.category === "cultural" ? "Cultural" :
+                                    item.category === "science" ? "Science" :
+                                      item.category === "milestones" ? "Topper & Milestone" : "News Coverage"}
                             </div>
                           </div>
 
-                          {/* Category Tag pill overlay */}
-                          <div className="absolute top-3 left-3 bg-white/95 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest font-semibold border border-border-custom rounded-sm text-maroon shadow-sm">
-                            {item.category === "awards" ? "Award Meet" :
-                              item.category === "sports" ? "Athletics" :
-                                item.category === "cultural" ? "Cultural" :
-                                  item.category === "science" ? "Science" :
-                                    item.category === "milestones" ? "Topper & Milestone" : "News Coverage"}
+                          {/* Info Panel */}
+                          <div className="p-5 border-t border-border-custom/50">
+                            <h3 className="font-serif text-lg text-ink-navy font-bold leading-tight group-hover:text-maroon transition-colors">
+                              {item.title}
+                            </h3>
+                            <p className="text-muted-text text-xs font-sans mt-1 leading-relaxed">
+                              {item.subtitle}
+                            </p>
                           </div>
-                        </div>
-
-                        {/* Info Panel */}
-                        <div className="p-5 border-t border-border-custom/50">
-                          <h3 className="font-serif text-lg text-ink-navy font-bold leading-tight group-hover:text-maroon transition-colors">
-                            {item.title}
-                          </h3>
-                          <p className="text-muted-text text-xs font-sans mt-1 leading-relaxed">
-                            {item.subtitle}
-                          </p>
-                        </div>
+                        </TiltCard>
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -547,7 +621,8 @@ export default function Gallery({
 
               {/* Image Column */}
               <div className="relative flex-1 bg-black flex items-center justify-center aspect-[4/3] md:aspect-auto max-h-[50vh] md:max-h-none">
-                <img
+                <motion.img
+                  layoutId={`gallery-img-${selectedGalleryImg.id}`}
                   src={galleryImgErrors[selectedGalleryImg.id] ? selectedGalleryImg.fallbackSrc : selectedGalleryImg.localSrc}
                   alt={selectedGalleryImg.title}
                   loading="lazy"

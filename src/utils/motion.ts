@@ -30,6 +30,20 @@ export const MotionSpring = {
     stiffness: 200,
     damping: 20,
   },
+  scrollProgress: {
+    stiffness: 400,
+    damping: 40,
+    restDelta: 0.001,
+  },
+  magnetic: {
+    stiffness: 250,
+    damping: 15,
+    mass: 0.1,
+  },
+  tilt: {
+    stiffness: 300,
+    damping: 20,
+  },
 } as const;
 
 export const MotionViewport = {
@@ -77,6 +91,29 @@ export const childItemVariants: Variants = {
       duration: MotionDuration.normal,
       ease: MotionEase.out,
     },
+  },
+};
+
+// Unified Modal Motion Variants
+export const modalBackdropVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: MotionDuration.fast } },
+  exit: { opacity: 0, transition: { duration: MotionDuration.fast } },
+};
+
+export const modalContentVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.95, y: 18 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: MotionDuration.fast, ease: MotionEase.out },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    y: 18,
+    transition: { duration: MotionDuration.fast, ease: MotionEase.out },
   },
 };
 
@@ -128,3 +165,4 @@ export const buttonPressProps = {
     transition: { duration: MotionDuration.instant, ease: MotionEase.out },
   },
 };
+

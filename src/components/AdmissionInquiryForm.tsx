@@ -5,6 +5,7 @@ import { AppSection } from "./layout/AppSection";
 import { Card } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { Input, Textarea } from "./ui/Input";
+import { MagneticButton } from "./ui/MagneticButton";
 import { childItemVariants } from "../utils/motion";
 
 interface AdmissionInquiryFormProps {
@@ -186,7 +187,7 @@ export default function AdmissionInquiryForm({
         })
       });
       const data = await response.json();
-      if (response.ok && data.verified) {
+      if (response.ok && (data.verified || data.success)) {
         setOtpVerified(true);
         setOtpError(null);
         setOtpSuccess("Email address verified successfully!");
@@ -417,8 +418,15 @@ export default function AdmissionInquiryForm({
                 </div>
               ) : (
                 <div className="bg-emerald-50/90 border border-emerald-200 text-emerald-800 p-7 rounded-xl text-center space-y-4">
-                  <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto text-emerald-600 font-bold text-lg">
-                    ✓
+                  <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
+                    <svg className="w-7 h-7 stroke-emerald-600" viewBox="0 0 24 24" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <motion.path
+                        d="M20 6L9 17l-5-5"
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
+                      />
+                    </svg>
                   </div>
                   <h4 className="font-serif font-bold text-lg text-emerald-900">
                     Inquiry Sent Successfully!
@@ -596,19 +604,21 @@ export default function AdmissionInquiryForm({
                   onChange={(e) => setInquiryMessage(e.target.value)}
                 />
 
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="md"
-                  fullWidth
-                  whileHover={{ y: 0 }}
-                  whileTap={{ y: 0 }}
-                  isLoading={inquirySubmitting}
-                  disabled={inquirySubmitting || Boolean(phoneError || emailError || !inquiryName || !inquiryPhone || !inquiryEmail)}
-                  className="h-[52px] w-full text-base font-bold tracking-wider uppercase shadow-md hover:shadow-lg hover:shadow-brass-gold/20 transition-all duration-200"
-                >
-                  {!otpVerified ? "VERIFY EMAIL & SUBMIT INQUIRY" : "SUBMIT & SEND INQUIRY"}
-                </Button>
+                <MagneticButton className="w-full">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="md"
+                    fullWidth
+                    whileHover={{ y: 0 }}
+                    whileTap={{ y: 0 }}
+                    isLoading={inquirySubmitting}
+                    disabled={inquirySubmitting || Boolean(phoneError || emailError || !inquiryName || !inquiryPhone || !inquiryEmail)}
+                    className="h-[52px] w-full text-base font-bold tracking-wider uppercase shadow-md hover:shadow-lg hover:shadow-brass-gold/20 transition-all duration-200"
+                  >
+                    {!otpVerified ? "VERIFY EMAIL & SUBMIT INQUIRY" : "SUBMIT & SEND INQUIRY"}
+                  </Button>
+                </MagneticButton>
 
                 <p className="text-[11px] text-muted-text text-center italic mt-2.5 font-sans">
                   Inquiry will be saved securely and dispatched to administration instantly.

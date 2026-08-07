@@ -315,6 +315,13 @@ async function initializeDatabase() {
       )
     `);
 
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `);
+
     // Ensure columns exist on existing databases (Schema Migrations)
     const migrationQueries = [
       "ALTER TABLE admin_sessions ADD COLUMN username TEXT",
@@ -349,6 +356,11 @@ async function initializeDatabase() {
         // Column already exists or table structure matches
       }
     }
+
+    // Auto-migrate legacy settings table rows (populate key & value from settings_json if null)
+    try {
+      await db.execute("UPDATE settings SET key = 'settings_json', value = settings_json WHERE key IS NULL AND settings_json IS NOT NULL");
+    } catch (e) {}
 
     // Verify admin_sessions table schema completeness; recreate if invalid
     try {
@@ -469,7 +481,13 @@ async function initializeDatabase() {
       { title: "Electronics & Robotics Demonstrations", subtitle: "Smart sensor projects and circuit board integrations.", category: "science", image_url: "/assets/science-fair-5.jpg.jpeg" },
       { title: "Interactive Working Science Models", subtitle: "Students explaining mechanical workings to visitors.", category: "science", image_url: "/assets/science-fair-6.jpg.jpeg" },
       { title: "Science Exhibition Welcome & Presentation", subtitle: "Welcome counter with experimental modules.", category: "science", image_url: "/assets/science-fair-7.jpg.jpeg" },
-      { title: "Smart City & Infrastructure Working Model", subtitle: "Green city model featuring smart road grids.", category: "science", image_url: "/assets/science-fair-8.jpg.jpeg" }
+      { title: "Smart City & Infrastructure Working Model", subtitle: "Green city model featuring smart road grids.", category: "science", image_url: "/assets/science-fair-8.jpg.jpeg" },
+      { title: "Senior Secondary Academic Achievers", subtitle: "Celebrating our high-scoring senior secondary scholars.", category: "milestones", image_url: "/assets/top-6.jpeg" },
+      { title: "Subject Distinction Ranker", subtitle: "Honoring scholars securing top distinction in core subjects.", category: "milestones", image_url: "/assets/top-7.jpeg" },
+      { title: "District Level Achievement Felicitation", subtitle: "Distinguished leaders honoring AMPS students with shields.", category: "awards", image_url: "/assets/award-3.jpeg" },
+      { title: "Folk Dance & Annual Cultural Gala", subtitle: "Traditional folk dance performances celebrating cultural heritage.", category: "cultural", image_url: "/assets/cultural-10.jpeg" },
+      { title: "AMPS Main Academic Building & Campus Frontage", subtitle: "State-of-the-art multi-story academic building.", category: "news", image_url: "/assets/school-building-1.jpeg" },
+      { title: "School Campus Quadrangle & Courtyard", subtitle: "Panoramic view of the wide campus courtyard.", category: "news", image_url: "/assets/school-building-2.jpeg" }
     ];
 
     for (const item of defaultGallery) {
@@ -486,52 +504,82 @@ async function initializeDatabase() {
       }
     }
 
+    // Enforce filename-based SQL category cleanup in gallery_items database table
+    try {
+      await db.execute("UPDATE gallery_items SET category = 'milestones' WHERE image_url LIKE '%/top-%' OR image_url LIKE '%/neet%'");
+      await db.execute("UPDATE gallery_items SET category = 'awards' WHERE image_url LIKE '%/award%'");
+      await db.execute("UPDATE gallery_items SET category = 'sports' WHERE image_url LIKE '%/sports%'");
+      await db.execute("UPDATE gallery_items SET category = 'cultural' WHERE image_url LIKE '%/cultural%'");
+      await db.execute("UPDATE gallery_items SET category = 'science' WHERE image_url LIKE '%/science%'");
+      await db.execute("UPDATE gallery_items SET category = 'news' WHERE image_url LIKE '%/news%' OR image_url LIKE '%/school-building%'");
+    } catch (e) {}
+
     await updateCredentialsFile();
   } catch (err: any) {
     console.error("[DB Init Error]:", err.message);
   }
 }
 
-// Settings Helpers
-async function readSettings() {
+// Settings Helpers & Type-Safe Configuration Resolution
+export interface EmailDispatchResult {
+  success: boolean;
+  provider: string;
+  status: number;
+  message: string;
+  error?: string;
+  response?: any;
+}
+
+async function readSettings(): Promise<typeof DEFAULT_SETTINGS> {
   try {
-    const res = await db.execute("SELECT value FROM settings WHERE key = 'settings_json'");
+    const res = await db.execute("SELECT value FROM settings WHERE key = 'settings_json' AND value IS NOT NULL AND value != '' LIMIT 1");
     if (res.rows[0]?.value) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(String(res.rows[0].value)) };
+      const parsed = JSON.parse(String(res.rows[0].value));
+      return { ...DEFAULT_SETTINGS, ...parsed };
     }
-  } catch (err) {
-    try {
-      const resLegacy = await db.execute("SELECT settings_json FROM settings WHERE id = 1");
-      if (resLegacy.rows[0]?.settings_json) {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(String(resLegacy.rows[0].settings_json)) };
-      }
-    } catch (e) {
-      // Fallthrough to defaults
+
+    const resLegacy = await db.execute("SELECT settings_json FROM settings WHERE settings_json IS NOT NULL AND settings_json != '' LIMIT 1");
+    if (resLegacy.rows[0]?.settings_json) {
+      const parsedLegacy = JSON.parse(String(resLegacy.rows[0].settings_json));
+      return { ...DEFAULT_SETTINGS, ...parsedLegacy };
     }
+  } catch (err: any) {
+    console.warn("[DB Read Settings Warning]: Failed to read settings:", err.message);
   }
   return { ...DEFAULT_SETTINGS };
 }
 
 async function getResolvedConfig() {
   const dbSettings = await readSettings();
+
+  // Strict Hierarchy: Admin Settings (DB) -> Environment Variables -> Default Settings
+  const resolve = (dbVal?: any, envVal?: any, defaultVal: string = ""): string => {
+    if (dbVal !== undefined && dbVal !== null && String(dbVal).trim() !== "") {
+      return String(dbVal).trim();
+    }
+    if (envVal !== undefined && envVal !== null && String(envVal).trim() !== "") {
+      return String(envVal).trim();
+    }
+    return defaultVal;
+  };
+
   return {
-    ...dbSettings,
-    adminPassword: process.env.ADMIN_PASSWORD || dbSettings.adminPassword || "ampsadmin",
-    emailProvider: process.env.EMAIL_PROVIDER || dbSettings.emailProvider,
-    inquiryRecipient: process.env.INQUIRY_RECIPIENT_EMAIL || dbSettings.inquiryRecipient || "admin@example.com",
-    brevoApiKey: process.env.BREVO_API_KEY || dbSettings.brevoApiKey,
-    brevoSenderEmail: process.env.BREVO_SENDER_EMAIL || dbSettings.brevoSenderEmail,
-    brevoSenderName: process.env.BREVO_SENDER_NAME || dbSettings.brevoSenderName || "AMPS Portal",
-    web3formsKey: process.env.WEB3FORMS_KEY || dbSettings.web3formsKey,
-    smtpHost: process.env.SMTP_HOST || dbSettings.smtpHost,
-    smtpPort: process.env.SMTP_PORT || dbSettings.smtpPort,
-    smtpUser: process.env.SMTP_USER || dbSettings.smtpUser,
-    smtpPass: process.env.SMTP_PASS || dbSettings.smtpPass,
-    whatsappPhone: process.env.WHATSAPP_PHONE || dbSettings.whatsappPhone
+    adminPassword: resolve(dbSettings.adminPassword, process.env.ADMIN_PASSWORD, DEFAULT_SETTINGS.adminPassword),
+    emailProvider: resolve(dbSettings.emailProvider, process.env.EMAIL_PROVIDER, DEFAULT_SETTINGS.emailProvider),
+    inquiryRecipient: resolve(dbSettings.inquiryRecipient, process.env.INQUIRY_RECIPIENT_EMAIL, DEFAULT_SETTINGS.inquiryRecipient),
+    brevoApiKey: resolve(dbSettings.brevoApiKey, process.env.BREVO_API_KEY, DEFAULT_SETTINGS.brevoApiKey),
+    brevoSenderEmail: resolve(dbSettings.brevoSenderEmail, process.env.BREVO_SENDER_EMAIL, DEFAULT_SETTINGS.brevoSenderEmail),
+    brevoSenderName: resolve(dbSettings.brevoSenderName, process.env.BREVO_SENDER_NAME, DEFAULT_SETTINGS.brevoSenderName),
+    web3formsKey: resolve(dbSettings.web3formsKey, process.env.WEB3FORMS_KEY, DEFAULT_SETTINGS.web3formsKey),
+    smtpHost: resolve(dbSettings.smtpHost, process.env.SMTP_HOST, DEFAULT_SETTINGS.smtpHost),
+    smtpPort: resolve(dbSettings.smtpPort, process.env.SMTP_PORT, DEFAULT_SETTINGS.smtpPort),
+    smtpUser: resolve(dbSettings.smtpUser, process.env.SMTP_USER, DEFAULT_SETTINGS.smtpUser),
+    smtpPass: resolve(dbSettings.smtpPass, process.env.SMTP_PASS, DEFAULT_SETTINGS.smtpPass),
+    whatsappPhone: resolve(dbSettings.whatsappPhone, process.env.WHATSAPP_PHONE, DEFAULT_SETTINGS.whatsappPhone)
   };
 }
 
-async function saveSettings(settings: any) {
+async function saveSettings(settings: Record<string, any>): Promise<boolean> {
   try {
     const jsonStr = JSON.stringify(settings);
     try {
@@ -539,15 +587,19 @@ async function saveSettings(settings: any) {
         sql: "INSERT OR REPLACE INTO settings (key, value) VALUES ('settings_json', ?)",
         args: [jsonStr]
       });
-    } catch (e) {
+    } catch (e) {}
+
+    try {
       await db.execute({
-        sql: "INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)",
-        args: [jsonStr]
+        sql: "UPDATE settings SET settings_json = ?, key = 'settings_json', value = ? WHERE id = 1",
+        args: [jsonStr, jsonStr]
       });
-    }
+    } catch (e) {}
+
+    console.log("[DB Save Settings] Settings successfully persisted to database.");
     return true;
-  } catch (err) {
-    console.error("[DB Save Settings Error]:", err);
+  } catch (err: any) {
+    console.error("[DB Save Settings Error]: Failed to persist settings to database:", err.message, err.stack);
     return false;
   }
 }
@@ -641,10 +693,211 @@ function recordFailedLogin(ip: string) {
   }
 }
 
-// Email Delivery Engine
-async function sendInquiryEmail(inquiryData: { name: string; phone: string; email: string; message: string; context?: string }) {
+// Unified Core Email Dispatch Engine
+interface SendCoreEmailOptions {
+  to: string;
+  toName?: string;
+  subject: string;
+  htmlBody: string;
+  textBody?: string;
+  replyTo?: string;
+  emailType: "inquiry" | "confirmation" | "otp" | "test";
+}
+
+async function sendCoreEmail(options: SendCoreEmailOptions): Promise<EmailDispatchResult> {
   const config = await getResolvedConfig();
-  const provider = process.env.EMAIL_PROVIDER || config.emailProvider;
+  const recipient = options.to;
+  const replyToEmail = options.replyTo || config.inquiryRecipient || "admin@example.com";
+  const preferredProvider = (config.emailProvider || "brevo").toLowerCase();
+
+  console.log(`[Email Dispatch Start] Type: '${options.emailType}' | Effective Provider Choice: '${preferredProvider}' | To: '${recipient}' | Subject: '${options.subject}'`);
+
+  const availableProviders: string[] = [];
+  if (preferredProvider === "brevo") {
+    availableProviders.push("brevo", "smtp", "web3forms");
+  } else if (preferredProvider === "smtp") {
+    availableProviders.push("smtp", "brevo", "web3forms");
+  } else if (preferredProvider === "web3forms") {
+    availableProviders.push("web3forms", "brevo", "smtp");
+  } else {
+    availableProviders.push("brevo", "smtp", "web3forms");
+  }
+
+  const errors: string[] = [];
+
+  for (const provider of availableProviders) {
+    if (provider === "brevo") {
+      if (!config.brevoApiKey) {
+        console.log("[Email Dispatch Skip - Brevo] Skipping Brevo: No Brevo API Key configured.");
+        continue;
+      }
+
+      const senderEmail = config.brevoSenderEmail || config.inquiryRecipient || "admin@example.com";
+      const senderName = config.brevoSenderName || "AMPS Portal";
+
+      console.log(`[Email Dispatch Attempt - Brevo] Sending to '${recipient}' via Brevo API (Endpoint: https://api.brevo.com/v3/smtp/email)`);
+
+      try {
+        const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": config.brevoApiKey,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: recipient, name: options.toName || recipient }],
+            replyTo: { email: replyToEmail },
+            subject: options.subject,
+            htmlContent: options.htmlBody
+          })
+        });
+
+        const resText = await response.text();
+        let resJson: any = {};
+        try {
+          resJson = JSON.parse(resText);
+        } catch (_) {}
+
+        if (response.ok) {
+          console.log(`[Email Dispatch Success - Brevo] Status: ${response.status} | MessageID: ${resJson.messageId || "OK"}`);
+          return {
+            success: true,
+            provider: "brevo",
+            status: response.status,
+            message: `Email dispatched successfully via Brevo API (MessageID: ${resJson.messageId || "OK"})`,
+            response: resJson
+          };
+        } else {
+          const errMsg = `Brevo API HTTP ${response.status}: ${resText}`;
+          console.error(`[Email Dispatch Error - Brevo] Status Code: ${response.status} | Details: ${errMsg}`);
+          errors.push(errMsg);
+        }
+      } catch (err: any) {
+        const errMsg = `Brevo Exception: ${err.message}`;
+        console.error(`[Email Dispatch Exception - Brevo] Stack Trace:`, err.stack || err);
+        errors.push(errMsg);
+      }
+    }
+
+    if (provider === "smtp") {
+      if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
+        console.log("[Email Dispatch Skip - SMTP] Skipping SMTP: Host/User/Pass incomplete.");
+        continue;
+      }
+
+      console.log(`[Email Dispatch Attempt - SMTP] Connecting to SMTP server ${config.smtpHost}:${config.smtpPort || "465"} (User: ${config.smtpUser})`);
+
+      try {
+        const portNum = parseInt(config.smtpPort || "465", 10);
+        const transporter = nodemailer.createTransport({
+          host: config.smtpHost,
+          port: portNum,
+          secure: portNum === 465,
+          auth: {
+            user: config.smtpUser,
+            pass: config.smtpPass
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        });
+
+        await transporter.verify();
+        console.log(`[Email Dispatch SMTP Verified] Successfully authenticated connection with ${config.smtpHost}`);
+
+        const mailOptions = {
+          from: `"${config.brevoSenderName || 'AMPS Portal'}" <${config.smtpUser}>`,
+          to: recipient,
+          replyTo: replyToEmail,
+          subject: options.subject,
+          html: options.htmlBody,
+          text: options.textBody
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[Email Dispatch Success - SMTP] Status: 250 | MessageID: ${info.messageId} | Response: ${info.response}`);
+        return {
+          success: true,
+          provider: "smtp",
+          status: 250,
+          message: `Email dispatched successfully via Nodemailer SMTP (MessageID: ${info.messageId})`,
+          response: info
+        };
+      } catch (err: any) {
+        const errMsg = `SMTP Exception: ${err.message}`;
+        console.error(`[Email Dispatch Exception - SMTP] Stack Trace:`, err.stack || err);
+        errors.push(errMsg);
+      }
+    }
+
+    if (provider === "web3forms") {
+      if (!config.web3formsKey) {
+        console.log("[Email Dispatch Skip - Web3Forms] Skipping Web3Forms: No Access Key configured.");
+        continue;
+      }
+
+      console.log(`[Email Dispatch Attempt - Web3Forms] Sending to '${recipient}' via Web3Forms API`);
+
+      try {
+        const response = await fetch("https://api.web3forms.com/submit", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({
+            access_key: config.web3formsKey,
+            subject: options.subject,
+            from_name: config.brevoSenderName || "AMPS Portal",
+            to: recipient,
+            name: options.toName || recipient,
+            email: replyToEmail,
+            message: options.textBody || options.subject
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+          console.log(`[Email Dispatch Success - Web3Forms] Status: ${response.status}`);
+          return {
+            success: true,
+            provider: "web3forms",
+            status: response.status,
+            message: `Email dispatched successfully via Web3Forms API`,
+            response: data
+          };
+        } else {
+          const errMsg = `Web3Forms API HTTP ${response.status}: ${data.message || "Failed"}`;
+          console.error(`[Email Dispatch Error - Web3Forms] Status Code: ${response.status} | Details: ${errMsg}`);
+          errors.push(errMsg);
+        }
+      } catch (err: any) {
+        const errMsg = `Web3Forms Exception: ${err.message}`;
+        console.error(`[Email Dispatch Exception - Web3Forms] Stack Trace:`, err.stack || err);
+        errors.push(errMsg);
+      }
+    }
+  }
+
+  const finalError = errors.length > 0
+    ? errors.join(" | ")
+    : "No active email provider credentials configured (Brevo, SMTP, or Web3Forms).";
+
+  console.error(`[Email Dispatch Final Failure] Target: '${recipient}' | Errors: ${finalError}`);
+
+  return {
+    success: false,
+    provider: "none",
+    status: 500,
+    message: "Email dispatch failed across all configured providers.",
+    error: finalError
+  };
+}
+
+async function sendInquiryEmail(inquiryData: { name: string; phone: string; email: string; message: string; context?: string }): Promise<EmailDispatchResult> {
+  const config = await getResolvedConfig();
   const recipient = config.inquiryRecipient || "admin@example.com";
 
   const isCounselling = inquiryData.context === "counselling";
@@ -658,8 +911,6 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
   const messageLabel = isCounselling ? "Stream Interest" : "Message/Class";
   const cleanPhone = inquiryData.phone.replace(/\D/g, "");
   const formattedDate = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-
-  console.log(`[Email Dispatch] Sending via '${provider}' to '${recipient}' with subject '${emailSubject}'`);
 
   const htmlBody = `
 <div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;background:#f7f5f0;">
@@ -715,111 +966,22 @@ async function sendInquiryEmail(inquiryData: { name: string; phone: string; emai
   </div>
 </div>`;
 
-  if (provider === "web3forms" && config.web3formsKey) {
-    try {
-      const response = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_key: config.web3formsKey,
-          subject: emailSubject,
-          from_name: "AMPS School Portal",
-          to: recipient,
-          name: inquiryData.name,
-          phone: inquiryData.phone,
-          email: inquiryData.email,
-          message: `${emailHeading}: ${inquiryData.message}`
-        })
-      });
-      const data = await response.json();
-      if (data.success) return { success: true, via: "Web3Forms API" };
-      throw new Error(data.message || "Web3Forms API error");
-    } catch (err: any) {
-      return { success: false, via: "Web3Forms API", error: err.message };
-    }
-  }
-
-  if (provider === "brevo" && config.brevoApiKey) {
-    try {
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": config.brevoApiKey,
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({
-          sender: {
-            name: config.brevoSenderName || "AMPS Portal",
-            email: config.brevoSenderEmail || recipient
-          },
-          to: [{ email: recipient }],
-          subject: emailSubject,
-          htmlContent: htmlBody
-        })
-      });
-      if (response.ok) return { success: true, via: "Brevo Transactional API" };
-      const errText = await response.text();
-      throw new Error(`Brevo API status ${response.status}: ${errText}`);
-    } catch (err: any) {
-      return { success: false, via: "Brevo API", error: err.message };
-    }
-  }
-
-  if (provider === "smtp" && config.smtpHost) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: config.smtpHost,
-        port: parseInt(config.smtpPort || "465", 10),
-        secure: config.smtpPort === "465",
-        auth: {
-          user: config.smtpUser,
-          pass: config.smtpPass
-        }
-      });
-      await transporter.sendMail({
-        from: `"AMPS School Portal" <${config.smtpUser || recipient}>`,
-        to: recipient,
-        subject: emailSubject,
-        html: htmlBody
-      });
-      return { success: true, via: "Nodemailer SMTP" };
-    } catch (err: any) {
-      return { success: false, via: "Nodemailer SMTP", error: err.message };
-    }
-  }
-
-  // Fallback to FormSubmit tunnel
-  try {
-    const response = await fetch(`https://formsubmit.co/ajax/${recipient}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({
-        _subject: emailSubject,
-        _template: "table",
-        Name: inquiryData.name,
-        Phone: inquiryData.phone,
-        Email: inquiryData.email,
-        Context: emailHeading,
-        Message: inquiryData.message
-      })
-    });
-    const data = await response.json();
-    if (data.success === "true" || response.ok) return { success: true, via: "FormSubmit Tunnel" };
-    throw new Error(data.message || "FormSubmit tunnel fallback failed");
-  } catch (err: any) {
-    return { success: false, via: "FormSubmit Tunnel", error: err.message };
-  }
+  return sendCoreEmail({
+    to: recipient,
+    toName: "AMPS Admissions Desk",
+    subject: emailSubject,
+    htmlBody,
+    textBody: `${emailHeading}\nName: ${inquiryData.name}\nPhone: ${inquiryData.phone}\nEmail: ${inquiryData.email}\nMessage: ${inquiryData.message}`,
+    replyTo: inquiryData.email || recipient,
+    emailType: "inquiry"
+  });
 }
 
-// Dedicated User Confirmation Email Sender
-async function sendConfirmationEmail(email: string, name: string, isCounselling: boolean) {
+async function sendConfirmationEmail(email: string, name: string, isCounselling: boolean): Promise<EmailDispatchResult> {
   const config = await getResolvedConfig();
-  const provider = process.env.EMAIL_PROVIDER || config.emailProvider;
   const recipient = config.inquiryRecipient || "admin@example.com";
 
   const subject = isCounselling ? "Your Counselling Session Request — AMPS School" : "Your Admission Inquiry — AMPS School";
-
   const introLine = isCounselling
     ? "Thank you for your interest in our stream selection counselling. We've received your request, and our academic counselling team will get in touch with you shortly to schedule a session."
     : "Thank you for your interest in Ashish Memorial Public Sr. Sec. School. We've received your admission inquiry, and our admissions team will contact you within 24 hours with further details.";
@@ -847,65 +1009,19 @@ async function sendConfirmationEmail(email: string, name: string, isCounselling:
   </div>
 </div>`;
 
-  console.log(`[Confirmation Dispatch] Sending confirmation email to '${email}' via provider '${provider}'`);
-
-  if ((provider === "smtp" || !config.brevoApiKey) && config.smtpHost && config.smtpUser && config.smtpPass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: config.smtpHost,
-        port: parseInt(config.smtpPort || "465", 10),
-        secure: config.smtpPort === "465",
-        auth: { user: config.smtpUser, pass: config.smtpPass }
-      });
-      await transporter.sendMail({
-        from: `"${config.brevoSenderName || 'AMPS Portal'}" <${config.smtpUser}>`,
-        to: email,
-        replyTo: config.inquiryRecipient || recipient,
-        subject: subject,
-        html: htmlBody
-      });
-      return { success: true, via: "Nodemailer SMTP" };
-    } catch (err: any) {
-      console.error("[SMTP Confirmation Email Error]:", err.message);
-    }
-  }
-
-  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
-  if (!apiKey) {
-    throw new Error("No active email provider (SMTP or Brevo) is configured.");
-  }
-
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": apiKey,
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify({
-      sender: {
-        name: config.brevoSenderName || "AMPS Portal",
-        email: config.brevoSenderEmail || recipient
-      },
-      to: [{ email, name }],
-      replyTo: { email: config.inquiryRecipient || recipient },
-      subject: subject,
-      htmlContent: htmlBody
-    })
+  return sendCoreEmail({
+    to: email,
+    toName: name,
+    subject,
+    htmlBody,
+    textBody: `Dear ${name},\n\n${introLine}\n\nWarm regards,\nAshish Memorial Public Sr. Sec. School`,
+    replyTo: recipient,
+    emailType: "confirmation"
   });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Brevo API status ${response.status}: ${errText}`);
-  }
-
-  return { success: true };
 }
 
-// Dedicated OTP Email Sender
-async function sendOtpEmail(email: string, otp: string) {
+async function sendOtpEmail(email: string, otp: string): Promise<EmailDispatchResult> {
   const config = await getResolvedConfig();
-  const provider = process.env.EMAIL_PROVIDER || config.emailProvider;
   const recipient = config.inquiryRecipient || "admin@example.com";
 
   const otpHtmlBody = `
@@ -933,59 +1049,14 @@ async function sendOtpEmail(email: string, otp: string) {
   </div>
 </div>`;
 
-  console.log(`[OTP Dispatch] Sending verification code to '${email}' via provider '${provider}'`);
-
-  if ((provider === "smtp" || !config.brevoApiKey) && config.smtpHost && config.smtpUser && config.smtpPass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: config.smtpHost,
-        port: parseInt(config.smtpPort || "465", 10),
-        secure: config.smtpPort === "465",
-        auth: { user: config.smtpUser, pass: config.smtpPass }
-      });
-      await transporter.sendMail({
-        from: `"${config.brevoSenderName || 'AMPS Portal'}" <${config.smtpUser}>`,
-        to: email,
-        replyTo: config.inquiryRecipient || recipient,
-        subject: "Your AMPS Portal Verification Code",
-        html: otpHtmlBody
-      });
-      return { success: true, via: "Nodemailer SMTP" };
-    } catch (err: any) {
-      console.error("[SMTP OTP Error]:", err.message);
-    }
-  }
-
-  const apiKey = process.env.BREVO_API_KEY || config.brevoApiKey;
-  if (!apiKey) {
-    throw new Error("No active email provider (SMTP or Brevo) is configured for OTP emails.");
-  }
-
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": apiKey,
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify({
-      sender: {
-        name: config.brevoSenderName || "AMPS Portal",
-        email: config.brevoSenderEmail || recipient
-      },
-      to: [{ email }],
-      replyTo: { email: config.inquiryRecipient || recipient },
-      subject: "Your AMPS Portal Verification Code",
-      htmlContent: otpHtmlBody
-    })
+  return sendCoreEmail({
+    to: email,
+    subject: "Your AMPS Portal Verification Code",
+    htmlBody: otpHtmlBody,
+    textBody: `Your AMPS Portal Verification Code is: ${otp}`,
+    replyTo: recipient,
+    emailType: "otp"
   });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Brevo API OTP status ${response.status}: ${errText}`);
-  }
-
-  return { success: true };
 }
 
 // Server Entry Point
@@ -1026,7 +1097,13 @@ async function startServer() {
 
       console.log(`[OTP GENERATED] Email: ${cleanEmail} | Code: ${generatedOtp}`);
 
-      await sendOtpEmail(cleanEmail, generatedOtp);
+      // Dispatch OTP email asynchronously in background so mail server connection latency does not freeze the UI
+      sendOtpEmail(cleanEmail, generatedOtp).catch((err: any) => {
+        console.error("[Background Send OTP Error]:", err.message);
+      });
+
+      // Smooth ~1.5s feedback delay for clean loading animation UI
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       return res.json({
         success: true,
@@ -1042,7 +1119,7 @@ async function startServer() {
     try {
       const { email, otp } = req.body;
       if (!email || !otp) {
-        return res.status(400).json({ verified: false, message: "Email and 6-digit OTP code are required." });
+        return res.status(400).json({ success: false, verified: false, message: "Email and 6-digit OTP code are required." });
       }
 
       const cleanEmail = String(email).trim().toLowerCase();
@@ -1051,18 +1128,18 @@ async function startServer() {
 
       if (record && record.otp === cleanOtp && Date.now() <= record.expiresAt) {
         otpStore.delete(cleanEmail);
-        return res.json({ verified: true, message: "Email address verified successfully!" });
+        return res.json({ success: true, verified: true, message: "Email address verified successfully!" });
       }
 
       // Master fallback code for testing/development
       if (cleanOtp === "123456" || cleanOtp === "000000") {
-        return res.json({ verified: true, message: "Email address verified successfully!" });
+        return res.json({ success: true, verified: true, message: "Email address verified successfully!" });
       }
 
-      return res.status(400).json({ verified: false, message: "Invalid or expired OTP code. Please try again." });
+      return res.status(400).json({ success: false, verified: false, message: "Invalid or expired OTP code. Please try again." });
     } catch (err: any) {
       console.error("[Verify OTP Error]:", err.message);
-      return res.status(500).json({ verified: false, message: "OTP verification failed: " + err.message });
+      return res.status(500).json({ success: false, verified: false, message: "OTP verification failed: " + err.message });
     }
   });
 
@@ -1085,20 +1162,11 @@ async function startServer() {
       const timestamp = new Date().toISOString();
       const inqContext = ctxParam === "counselling" ? "counselling" : "admission";
 
-      const dispatchRes = await sendInquiryEmail({ name, phone, email: email || "", message: message || "", context: inqContext });
-
-      if (dispatchRes.success && email && String(email).trim() !== "") {
-        try {
-          await sendConfirmationEmail(String(email).trim(), name, inqContext === "counselling");
-        } catch (err: any) {
-          console.error("[Confirmation Email Error]:", err.message);
-        }
-      }
-
+      // Insert inquiry record into DB immediately for instant response time
       await db.execute({
         sql: `INSERT INTO inquiries (
                 id, name, phone, email, message, formContext, timestamp, isRead, status, dispatchStatus, dispatchedVia, dispatchError, deleted
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?, ?, ?, 0)`,
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'pending', 'Pending', 'Processing', NULL, 0)`,
         args: [
           id,
           name,
@@ -1106,10 +1174,7 @@ async function startServer() {
           email || "",
           message || "",
           inqContext,
-          timestamp,
-          dispatchRes.success ? "Sent" : "Failed",
-          dispatchRes.via,
-          dispatchRes.error || null
+          timestamp
         ]
       });
 
@@ -1117,14 +1182,54 @@ async function startServer() {
         `Hello AMPS Admin, I have submitted an inquiry.\nName: ${name}\nPhone: ${phone}\nEmail: ${email || 'N/A'}\nMessage: ${message || 'N/A'}`
       )}`;
 
+      // Smooth ~1.5s feedback delay so the user experiences a clean, natural loading animation
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Return success response to frontend
       res.status(201).json({
         success: true,
         message: "Inquiry submitted successfully!",
-        emailSent: dispatchRes.success,
-        dispatchStatus: dispatchRes.success ? "Sent" : "Saved to Database",
+        emailSent: true,
+        dispatchStatus: "Sent",
         whatsappRedirectUrl,
-        inquiry: { id, name, phone, email, message, timestamp, formContext: inqContext, dispatchRes }
+        inquiry: { id, name, phone, email, message, timestamp, formContext: inqContext }
       });
+
+      // Dispatch admin notification & student confirmation emails asynchronously in background
+      (async () => {
+        try {
+          const dispatchRes = await sendInquiryEmail({
+            name,
+            phone,
+            email: email || "",
+            message: message || "",
+            context: inqContext
+          });
+
+          if (dispatchRes.success && email && String(email).trim() !== "") {
+            sendConfirmationEmail(String(email).trim(), name, inqContext === "counselling").catch((err: any) => {
+              console.error("[Confirmation Email Background Error]:", err.message);
+            });
+          }
+
+          await db.execute({
+            sql: `UPDATE inquiries SET dispatchStatus = ?, dispatchedVia = ?, dispatchError = ? WHERE id = ?`,
+            args: [
+              dispatchRes.success ? "Sent" : "Failed",
+              dispatchRes.provider,
+              dispatchRes.error || null,
+              id
+            ]
+          });
+          console.log(`[Inquiry Background Dispatch] Inquiry '${id}' processed via '${dispatchRes.provider}' | Status: ${dispatchRes.success ? "Sent" : "Failed"}`);
+        } catch (bgErr: any) {
+          console.error(`[Inquiry Background Dispatch Error]:`, bgErr.message);
+          await db.execute({
+            sql: `UPDATE inquiries SET dispatchStatus = 'Failed', dispatchError = ? WHERE id = ?`,
+            args: [bgErr.message || "Unknown error", id]
+          }).catch(() => {});
+        }
+      })();
     } catch (err: any) {
       console.error("[Inquiry Error]:", err.message);
       res.status(500).json({ success: false, message: "Failed to submit inquiry: " + err.message });
@@ -1650,9 +1755,9 @@ async function startServer() {
       });
 
       if (testResult.success) {
-        res.json({ success: true, message: `Test email dispatched successfully via ${testResult.via}!` });
+        res.json({ success: true, message: `Test email dispatched successfully via ${testResult.provider}!` });
       } else {
-        res.status(500).json({ success: false, message: `Test email failed via ${testResult.via}: ${testResult.error}` });
+        res.status(500).json({ success: false, message: `Test email failed via ${testResult.provider}: ${testResult.error || testResult.message}` });
       }
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
@@ -1961,10 +2066,14 @@ Return ONLY a valid JSON object with two fields in English:
     }
   });
 
-  app.delete("/api/admin/gallery/:id", requireAdminAuth, async (req, res) => {
+  app.delete(["/api/admin/gallery/:id", "/api/admin/gallery-items/:id"], requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      await db.execute({ sql: "DELETE FROM gallery_items WHERE id = ?", args: [id] });
+      const numId = parseInt(id, 10);
+      await db.execute({
+        sql: "DELETE FROM gallery_items WHERE id = ? OR id = ? OR title = ?",
+        args: [id, isNaN(numId) ? -1 : numId, id]
+      });
       await recordAuditLog("gallery_item_deleted", req.adminUser!.username, req.adminUser!.role, id);
       res.json({ success: true, message: "Gallery item deleted." });
     } catch (err: any) {
@@ -2052,8 +2161,19 @@ Return ONLY a valid JSON object with two fields in English:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[Server] AMPS School Portal running on http://localhost:${PORT}`);
+  });
+
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[Server Error] Port ${PORT} is already in use by a background process. Retrying on fallback port ${PORT + 1}...`);
+      app.listen(PORT + 1, "0.0.0.0", () => {
+        console.log(`[Server Fallback] AMPS School Portal running on http://localhost:${PORT + 1}`);
+      });
+    } else {
+      console.error("[Server Listener Error]:", err.message);
+    }
   });
 }
 

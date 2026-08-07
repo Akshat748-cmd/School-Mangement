@@ -4,6 +4,8 @@ import { motion, useScroll, useTransform } from "motion/react";
 import { AppContainer } from "./layout/AppContainer";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { MagneticButton } from "./ui/MagneticButton";
+import { TiltCard } from "./ui/TiltCard";
 import {
   sectionContainerVariants,
   childItemVariants,
@@ -106,41 +108,45 @@ export default function Hero({
 
             {/* Primary & Secondary Call to Actions */}
             <motion.div variants={childItemVariants} className="flex flex-wrap gap-4 sm:gap-5 items-center max-w-[510px] mb-7 sm:mb-8">
-              <Button
-                variant="primary"
-                size="md"
-                whileHover={{ y: -2 }}
-                whileTap={{ y: 0 }}
-                onClick={(e) => {
-                  if (onOpenAboutModal) {
-                    e.preventDefault();
-                    onOpenAboutModal();
-                  }
-                }}
-                className="h-[50px] sm:h-[52px] px-[26px] sm:px-[28px] text-sm sm:text-base font-bold shadow-md hover:shadow-lg hover:shadow-brass-gold/20 transition-all duration-200"
-              >
-                Explore the School
-              </Button>
-
-              <a
-                href="#contact"
-                onClick={(e) => {
-                  if (onOpenInquiryModal) {
-                    e.preventDefault();
-                    onOpenInquiryModal();
-                  }
-                }}
-              >
+              <MagneticButton>
                 <Button
-                  variant="outline"
+                  variant="primary"
                   size="md"
                   whileHover={{ y: -2 }}
                   whileTap={{ y: 0 }}
-                  className="h-[50px] sm:h-[52px] px-[26px] sm:px-[28px] text-sm sm:text-base font-bold text-white border-white/80 hover:bg-white hover:text-ink-navy shadow-sm hover:shadow-lg transition-all duration-200"
+                  onClick={(e) => {
+                    if (onOpenAboutModal) {
+                      e.preventDefault();
+                      onOpenAboutModal();
+                    }
+                  }}
+                  className="h-[50px] sm:h-[52px] px-[26px] sm:px-[28px] text-sm sm:text-base font-bold shadow-md hover:shadow-lg hover:shadow-brass-gold/20 transition-all duration-200"
                 >
-                  Admission 2026–27
+                  Explore the School
                 </Button>
-              </a>
+              </MagneticButton>
+
+              <MagneticButton>
+                <a
+                  href="#contact"
+                  onClick={(e) => {
+                    if (onOpenInquiryModal) {
+                      e.preventDefault();
+                      onOpenInquiryModal();
+                    }
+                  }}
+                >
+                  <Button
+                    variant="outline"
+                    size="md"
+                    whileHover={{ y: -2 }}
+                    whileTap={{ y: 0 }}
+                    className="h-[50px] sm:h-[52px] px-[26px] sm:px-[28px] text-sm sm:text-base font-bold text-white border-white/80 hover:bg-white hover:text-ink-navy shadow-sm hover:shadow-lg transition-all duration-200"
+                  >
+                    Admission 2026–27
+                  </Button>
+                </a>
+              </MagneticButton>
             </motion.div>
 
             {/* Key Academic Statistics Grid - 100% Fully Visible */}
@@ -148,26 +154,32 @@ export default function Hero({
               variants={childItemVariants}
               className="grid grid-cols-3 gap-3 sm:gap-4 pt-5 border-t border-white/15 max-w-[510px] w-full"
             >
-              <div className="bg-white/[0.08] backdrop-blur-md border border-white/15 rounded-xl py-2.5 px-3 sm:py-3 sm:px-4 text-left transition-all duration-300 hover:border-brass-gold/40 hover:bg-white/[0.12] shadow-sm group">
-                <p className="font-serif text-lg sm:text-xl font-bold text-white/95 group-hover:text-brass-gold transition-colors">100%</p>
-                <p className="font-mono text-[9px] sm:text-[10px] text-slate-200/90 uppercase tracking-wider mt-0.5 font-medium">
-                  Board Success
-                </p>
-              </div>
+              <TiltCard className="rounded-xl">
+                <div className="bg-white/[0.08] backdrop-blur-md border border-white/15 rounded-xl py-2.5 px-3 sm:py-3 sm:px-4 text-left transition-all duration-300 hover:border-brass-gold/40 hover:bg-white/[0.12] shadow-sm group">
+                  <p className="font-serif text-lg sm:text-xl font-bold text-white/95 group-hover:text-brass-gold transition-colors">100%</p>
+                  <p className="font-mono text-[9px] sm:text-[10px] text-slate-200/90 uppercase tracking-wider mt-0.5 font-medium">
+                    Board Success
+                  </p>
+                </div>
+              </TiltCard>
 
-              <div className="bg-white/[0.08] backdrop-blur-md border border-white/15 rounded-xl py-2.5 px-3 sm:py-3 sm:px-4 text-left transition-all duration-300 hover:border-brass-gold/40 hover:bg-white/[0.12] shadow-sm group">
-                <p className="font-serif text-lg sm:text-xl font-bold text-white/95 group-hover:text-brass-gold transition-colors">Science</p>
-                <p className="font-mono text-[9px] sm:text-[10px] text-slate-200/90 uppercase tracking-wider mt-0.5 font-medium">
-                  Commerce & Arts
-                </p>
-              </div>
+              <TiltCard className="rounded-xl">
+                <div className="bg-white/[0.08] backdrop-blur-md border border-white/15 rounded-xl py-2.5 px-3 sm:py-3 sm:px-4 text-left transition-all duration-300 hover:border-brass-gold/40 hover:bg-white/[0.12] shadow-sm group">
+                  <p className="font-serif text-lg sm:text-xl font-bold text-white/95 group-hover:text-brass-gold transition-colors">Science</p>
+                  <p className="font-mono text-[9px] sm:text-[10px] text-slate-200/90 uppercase tracking-wider mt-0.5 font-medium">
+                    Commerce & Arts
+                  </p>
+                </div>
+              </TiltCard>
 
-              <div className="bg-white/[0.08] backdrop-blur-md border border-white/15 rounded-xl py-2.5 px-3 sm:py-3 sm:px-4 text-left transition-all duration-300 hover:border-brass-gold/40 hover:bg-white/[0.12] shadow-sm group">
-                <p className="font-serif text-lg sm:text-xl font-bold text-white/95 group-hover:text-brass-gold transition-colors">PG-XII</p>
-                <p className="font-mono text-[9px] sm:text-[10px] text-slate-200/90 uppercase tracking-wider mt-0.5 font-medium">
-                  Complete Journey
-                </p>
-              </div>
+              <TiltCard className="rounded-xl">
+                <div className="bg-white/[0.08] backdrop-blur-md border border-white/15 rounded-xl py-2.5 px-3 sm:py-3 sm:px-4 text-left transition-all duration-300 hover:border-brass-gold/40 hover:bg-white/[0.12] shadow-sm group">
+                  <p className="font-serif text-lg sm:text-xl font-bold text-white/95 group-hover:text-brass-gold transition-colors">PG-XII</p>
+                  <p className="font-mono text-[9px] sm:text-[10px] text-slate-200/90 uppercase tracking-wider mt-0.5 font-medium">
+                    Complete Journey
+                  </p>
+                </div>
+              </TiltCard>
             </motion.div>
           </motion.div>
         </AppContainer>

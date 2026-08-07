@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Menu, X, ArrowRight } from "lucide-react";
 import { AppContainer } from "./layout/AppContainer";
 import { Button } from "./ui/Button";
+import { MagneticButton } from "./ui/MagneticButton";
 import { MotionDuration, MotionEase, buttonPressProps } from "../utils/motion";
 
 // Custom SVG school logo fallback matching official school branding
@@ -339,14 +340,16 @@ export default function Header({
 
             {/* Refined Admission Header CTA */}
             <a href="#contact" className="ml-2">
-              <Button
-                variant="primary"
-                size="sm"
-                rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-                className="shadow-sm font-sans uppercase text-[11px] font-bold tracking-wider"
-              >
-                Admission 2026–27
-              </Button>
+              <MagneticButton maxOffset={8}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                  className="shadow-sm font-sans uppercase text-[11px] font-bold tracking-wider"
+                >
+                  Admission 2026–27
+                </Button>
+              </MagneticButton>
             </a>
           </nav>
 

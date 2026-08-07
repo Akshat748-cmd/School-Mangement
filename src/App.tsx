@@ -12,7 +12,8 @@ import {
   MapPin
 } from "lucide-react";
 
-// Import modular components
+import { ScrollProgressBar } from "./components/ui/ScrollProgressBar";
+import { TiltCard } from "./components/ui/TiltCard";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import Gallery from "./components/Gallery";
@@ -199,6 +200,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-brass-gold selection:text-ink-navy bg-ivory-paper">
+      {/* GLOBAL SCROLL PROGRESS BAR */}
+      <ScrollProgressBar />
 
       {/* 1. STICKY NAVBAR */}
       <Header
@@ -712,7 +715,7 @@ export default function App() {
             <div className="w-full max-w-[440px] bg-white rounded-2xl p-3 sm:p-4 border-2 border-brass-gold/35 shadow-xl relative overflow-hidden text-slate-800">
               <div className="w-full bg-slate-100 rounded-xl overflow-hidden relative shadow-xs">
                 <img
-                  src="/assets/principal.jpeg?v=2"
+                  src="/assets/principal-2.jpeg"
                   alt="Ashish Memorial Public School Inspirational Leadership"
                   loading="lazy"
                   className="w-full h-auto object-cover max-h-[460px]"

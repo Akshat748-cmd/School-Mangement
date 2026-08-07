@@ -105,7 +105,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [galleryManagerItems, setGalleryManagerItems] = useState<any[]>([]);
   const [newGalleryTitle, setNewGalleryTitle] = useState("");
   const [newGallerySubtitle, setNewGallerySubtitle] = useState("");
-  const [newGalleryCategory, setNewGalleryCategory] = useState("general");
+  const [newGalleryCategory, setNewGalleryCategory] = useState("milestones");
   const [newGalleryImageUrl, setNewGalleryImageUrl] = useState("");
   const [isCreatingGalleryItem, setIsCreatingGalleryItem] = useState(false);
   const [isDeletingGalleryItem, setIsDeletingGalleryItem] = useState<Record<number, boolean>>({});
@@ -326,15 +326,26 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   const handleDeleteAnnouncement = async (id: number) => {
-    if (!window.confirm("Delete this announcement?")) return;
+    if (!window.confirm("Are you sure you want to delete this announcement?")) return;
     setIsDeletingAnnouncement(prev => ({ ...prev, [id]: true }));
+    const previousAnnouncements = [...announcements];
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
     try {
       const res = await adminFetch(`/api/admin/announcements/${id}`, { method: "DELETE" });
       const data = await res.json();
-      if (res.ok && data.success) { showToast("Announcement deleted.", "warning"); loadAnnouncementsSilent(); }
-      else { showToast(data.message || "Failed.", "error"); }
-    } catch (err: any) { showToast(err.message || "Error.", "error"); }
-    finally { setIsDeletingAnnouncement(prev => ({ ...prev, [id]: false })); }
+      if (res.ok && data.success) {
+        showToast("Announcement deleted.", "warning");
+        loadAnnouncementsSilent();
+      } else {
+        setAnnouncements(previousAnnouncements);
+        showToast(data.message || "Failed to delete announcement.", "error");
+      }
+    } catch (err: any) {
+      setAnnouncements(previousAnnouncements);
+      showToast(err.message || "Error deleting announcement.", "error");
+    } finally {
+      setIsDeletingAnnouncement(prev => ({ ...prev, [id]: false }));
+    }
   };
 
   const handleToggleAnnouncement = async (id: number) => {
@@ -360,23 +371,34 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
       const data = await res.json();
       if (res.ok && data.success) {
         showToast("Gallery item added!", "success");
-        setNewGalleryTitle(""); setNewGallerySubtitle(""); setNewGalleryCategory("general"); setNewGalleryImageUrl("");
+        setNewGalleryTitle(""); setNewGallerySubtitle(""); setNewGalleryCategory("milestones"); setNewGalleryImageUrl("");
         loadGalleryItemsSilent();
       } else { showToast(data.message || "Failed.", "error"); }
     } catch (err: any) { showToast(err.message || "Error.", "error"); }
     finally { setIsCreatingGalleryItem(false); }
   };
 
-  const handleDeleteGalleryItem = async (id: number) => {
-    if (!window.confirm("Delete this gallery item?")) return;
+  const handleDeleteGalleryItem = async (id: number | string) => {
+    if (!window.confirm("Are you sure you want to delete this gallery item?")) return;
     setIsDeletingGalleryItem(prev => ({ ...prev, [id]: true }));
+    const previousGallery = [...galleryManagerItems];
+    setGalleryManagerItems(prev => prev.filter(item => item.id !== id));
     try {
       const res = await adminFetch(`/api/admin/gallery/${id}`, { method: "DELETE" });
       const data = await res.json();
-      if (res.ok && data.success) { showToast("Gallery item deleted.", "warning"); loadGalleryItemsSilent(); }
-      else { showToast(data.message || "Failed.", "error"); }
-    } catch (err: any) { showToast(err.message || "Error.", "error"); }
-    finally { setIsDeletingGalleryItem(prev => ({ ...prev, [id]: false })); }
+      if (res.ok && data.success) {
+        showToast("Gallery item deleted.", "warning");
+        loadGalleryItemsSilent();
+      } else {
+        setGalleryManagerItems(previousGallery);
+        showToast(data.message || "Failed to delete gallery item.", "error");
+      }
+    } catch (err: any) {
+      setGalleryManagerItems(previousGallery);
+      showToast(err.message || "Error deleting gallery item.", "error");
+    } finally {
+      setIsDeletingGalleryItem(prev => ({ ...prev, [id]: false }));
+    }
   };
 
   const handleCreateEvent = async () => {
@@ -420,15 +442,26 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   const handleDeleteEvent = async (id: number) => {
-    if (!window.confirm("Delete this event?")) return;
+    if (!window.confirm("Are you sure you want to delete this event?")) return;
     setIsDeletingEvent(prev => ({ ...prev, [id]: true }));
+    const previousEvents = [...schoolEvents];
+    setSchoolEvents(prev => prev.filter(e => e.id !== id));
     try {
       const res = await adminFetch(`/api/admin/events/${id}`, { method: "DELETE" });
       const data = await res.json();
-      if (res.ok && data.success) { showToast("Event deleted.", "warning"); loadEventsSilent(); }
-      else { showToast(data.message || "Failed.", "error"); }
-    } catch (err: any) { showToast(err.message || "Error.", "error"); }
-    finally { setIsDeletingEvent(prev => ({ ...prev, [id]: false })); }
+      if (res.ok && data.success) {
+        showToast("Event deleted.", "warning");
+        loadEventsSilent();
+      } else {
+        setSchoolEvents(previousEvents);
+        showToast(data.message || "Failed to delete event.", "error");
+      }
+    } catch (err: any) {
+      setSchoolEvents(previousEvents);
+      showToast(err.message || "Error deleting event.", "error");
+    } finally {
+      setIsDeletingEvent(prev => ({ ...prev, [id]: false }));
+    }
   };
 
   const safeJsonResponse = async (res: Response) => {
@@ -829,6 +862,9 @@ function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, quality = 
 
   // ─── Inquiry Handlers ───────────────────────────────────────────────────────
   const handleDeleteInquiry = async (inquiryId: string) => {
+    if (!window.confirm("Are you sure you want to move this inquiry to trash?")) return;
+    const previousInquiries = [...adminInquiries];
+    setAdminInquiries(prev => prev.filter(inq => inq.id !== inquiryId));
     try {
       const response = await adminFetch(`/api/admin/inquiry/${inquiryId}`, { method: "DELETE" });
       const data = await response.json();
@@ -836,9 +872,11 @@ function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, quality = 
         showToast("Inquiry moved to trash.", "warning");
         loadDashboardData();
       } else {
+        setAdminInquiries(previousInquiries);
         showToast(data.message || "Failed to delete inquiry.", "error");
       }
     } catch (err: any) {
+      setAdminInquiries(previousInquiries);
       showToast(err.message || "Error deleting inquiry.", "error");
     }
   };
@@ -2354,7 +2392,6 @@ function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, quality = 
                                   onChange={e => setNewGalleryCategory(e.target.value)}
                                   className="w-full bg-white border border-[#d1c9bc] rounded-md px-3 py-2.5 text-[12px] font-mono text-[#14213D] focus:outline-none focus:border-[#14213D]"
                                 >
-                                  <option value="general">General</option>
                                   <option value="milestones">Toppers & Milestones</option>
                                   <option value="awards">Award Ceremonies</option>
                                   <option value="sports">Sports & Fitness</option>
